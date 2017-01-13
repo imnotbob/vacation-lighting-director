@@ -6,7 +6,7 @@
  *      Updated to turn on a set of lights during active time, and turn them off at end of vacation time
  *
  *	Source code can be found here:
- *  https://github.com/imnotbob/vacation-lighting-director/blob/master/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-directory.groovy
+ *  https://github.com/imnotbob/vacation-lighting-director/blob/master/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-director.groovy
  *
  *	Copyright 2017 Eric Schott
  *
