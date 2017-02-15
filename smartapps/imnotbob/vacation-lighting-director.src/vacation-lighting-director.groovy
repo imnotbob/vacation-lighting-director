@@ -1,5 +1,5 @@
 /**
- *	Vacation Lighting Director  (based of tslagle's original)
+ *	Vacation Lighting Director  (based off of tslagle's original)
  *	Supports Longer interval times (up to 180 mins)
  *	Only turns off lights it turned on (vs calling to turn all off)
  * 
@@ -244,7 +244,9 @@ def clearState(turnOff = false) {
 	if(turnOff && atomicState?.Running) {
 		switches.off()
 		atomicState.vacactive_switches = []
-		on_during_active_lights.off()
+		if(on_during_active_lights) {
+			on_during_active_lights.off()
+		}
 		log.trace "All OFF"
 	}
 	atomicState.Running = false
@@ -401,9 +403,10 @@ def scheduleCheck(evt) {
 		atomicState.vacactive_switches = vacactive_switches
 		//log.trace "vacactive ${vacactive_switches} inactive ${inactive_switches}"
 
-		on_during_active_lights.on()
-		log.trace "turned on ${on_during_active_lights}"
-
+		if(on_during_active_lights) {
+			on_during_active_lights.on()
+			log.trace "turned on ${on_during_active_lights}"
+		}
 
 	} else if(people && someoneIsHome){
 		//don't turn off lights if anyone is home
