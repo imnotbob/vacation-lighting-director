@@ -35,9 +35,10 @@ definition(
 )
 
 preferences {
-	page name:"pageSetup"
-	page name:"Setup"
-	page name:"Settings"
+	page(name:"pageSetup")
+	page(name:"Setup")
+	page(name:"Settings")
+	page(name:"timeIntervalPage")
 
 }
 
@@ -124,7 +125,7 @@ def Setup() {
 		}
 		section("Simulator Triggers") {
 			input newMode
-			href "timeIntervalInput", title: "Times", description: timeIntervalLabel(), refreshAfterSelection:true
+			href "timeIntervalPage", title: "Times", description: timeIntervalLabel()    //, refreshAfterSelection:true
 		}
 		section("Light switches to cycle on/off") {
 			input switches
@@ -194,23 +195,25 @@ def Settings() {
 	}
 }
 
-page(name: "timeIntervalInput", title: "Only during a certain time", refreshAfterSelection:true) {
-	section {
-		input "startTimeType", "enum", title: "Starting at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], defaultValue: "time", submitOnChange: true
-		if (startTimeType in ["sunrise","sunset"]) {
-			input "startTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
+def timeIntervalPage() {
+	dynamicPage(name: "timeIntervalPage", title: "Only during a certain time") {
+		section {
+			input "startTimeType", "enum", title: "Starting at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], submitOnChange:true
+			if (startTimeType in ["sunrise","sunset"]) {
+				input "startTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
+			}
+			else {
+				input "starting", "time", title: "Start time", required: false
+			}
 		}
-		else {
-			input "starting", "time", title: "Start time", required: false
-		}
-	}
-	section {
-		input "endTimeType", "enum", title: "Ending at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], defaultValue: "time", submitOnChange: true
-		if (endTimeType in ["sunrise","sunset"]) {
-			input "endTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
-		}
-		else {
-			input "ending", "time", title: "End time", required: false
+		section {
+			input "endTimeType", "enum", title: "Ending at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], submitOnChange:true
+			if (endTimeType in ["sunrise","sunset"]) {
+				input "endTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
+			}
+			else {
+				input "ending", "time", title: "End time", required: false
+			}
 		}
 	}
 }
