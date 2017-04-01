@@ -29,7 +29,7 @@ Example:
     * Time is sunset - until 11:30;
     * Lights are entrance, bedroom, livingroom, kitchen, hallway
     * Cycle time is 33 mins
-    * number of lights is 2
+    * number of active lights is 2
     * presence sensors are Bob, Jane
     
  * Operation
