@@ -1,6 +1,8 @@
 # vacation-lighting-director
 ERS update to tslagle's vacation-lighting-director
 
+https://community.smartthings.com/t/new-app-vacation-light-director/7230/265
+
 Inputs:
 
 Setup
