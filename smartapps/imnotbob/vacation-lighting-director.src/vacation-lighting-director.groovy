@@ -282,7 +282,7 @@ def setSched() {
 	def random_dint = random.nextInt(timgcd.toInteger())
 
 	def newDate = new Date()
-	def curMin = newDate.format("m", location.timeZone)
+	def curMin = newDate.format("m", getTimeZone())
 
 	def timestr = "${random_dint}/${timgcd}"
 	if(timgcd == 60) { timestr = "${curMin}" }
@@ -354,8 +354,7 @@ def GetTimeDiffSeconds(lastDate) {
 def getTimeZone() {
 	def tz = null
 	if (location?.timeZone) { tz = location?.timeZone }
-	else { tz = TimeZone.getTimeZone(getNestTimeZone()) }
-	if(!tz) { log.warn "getTimeZone: Hub or Nest TimeZone is not found ..." }
+	if(!tz) { log.warn "getTimeZone: SmartThings TimeZone is not found or is not set... Please Try to open your ST location and Press Save..." }
 	return tz
 }
 
@@ -450,8 +449,8 @@ private getDaysOk() {
 	def result = true
 	if (days) {
 		def df = new java.text.SimpleDateFormat("EEEE")
-		if (location.timeZone) {
-			df.setTimeZone(location.timeZone)
+		if (getTimeZone()) {
+			df.setTimeZone(getTimeZone())
 		}
 		else {
 			df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
@@ -487,10 +486,10 @@ private getSomeoneIsHome() {
 
 private getTimeOk() {
 	def result = true
-	def start = timeWindowStart() - 30000
-	def stop = timeWindowStop() - 30000
-	if (start && stop && location.timeZone) {
-		result = timeOfDayIsBetween(start, stop, new Date(), location.timeZone)
+	def start = timeWindowStart()
+	def stop = timeWindowStop()
+	if (start && stop && getTimeZone()) {
+		result = timeOfDayIsBetween( (start - 30000), (stop - 30000), new Date(), getTimeZone())
 	}
 	//log.debug "timeOk = $result"
 	result
@@ -510,8 +509,8 @@ private timeWindowStart() {
 			result = new Date(result.time + Math.round(startTimeOffset * 60000))
 		}
 	}
-	else if (starting && location.timeZone) {
-		result = timeToday(starting, location.timeZone)
+	else if (starting && getTimeZone()) {
+		result = timeToday(starting, getTimeZone())
 	}
 	//log.debug "timeWindowStart = ${result}"
 	result
@@ -531,17 +530,17 @@ private timeWindowStop() {
 			result = new Date(result.time + Math.round(endTimeOffset * 60000))
 		}
 	}
-	else if (ending && location.timeZone) {
-		result = timeToday(ending, location.timeZone)
+	else if (ending && getTimeZone()) {
+		result = timeToday(ending, getTimeZone())
 	}
 	//log.debug "timeWindowStop = ${result}"
 	result
 }
 
 private hhmm(time, fmt = "h:mm a") {
-	def t = timeToday(time, location.timeZone)
+	def t = timeToday(time, getTimeZone())
 	def f = new java.text.SimpleDateFormat(fmt)
-	f.setTimeZone(location.timeZone ?: timeZone(time))
+	f.setTimeZone(getTimeZone() ?: timeZone(time))
 	f.format(t)
 }
 
@@ -576,8 +575,8 @@ private timeIntervalLabel() {
 				finish += endTimeOffset > 0 ? "+${endTimeOffset} min" : "${endTimeOffset} min"
 			}
 			break
-		}
-		start && finish ? "${start} to ${finish}" : ""
+	}
+	start && finish ? "${start} to ${finish}" : ""
 }
 
 //sets complete/not complete for the setup section on the main dynamic page
