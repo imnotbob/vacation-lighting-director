@@ -261,12 +261,12 @@ def clearState(turnOff = false) {
 
 def schedStartEnd() {
 	if (starting != null || startTimeType != null) {
-		def start = timeWindowStart()
+		def start = timeWindowStart(true)
 		schedule(start, startTimeCheck)
 		atomicState.startendRunning = true
 	}
 	if (ending != null || endTimeType != null) {
-		def end = timeWindowStop()
+		def end = timeWindowStop(true)
 		schedule(end, endTimeCheck)
 		atomicState.startendRunning = true
 	}
@@ -489,13 +489,13 @@ private getTimeOk() {
 	def start = timeWindowStart()
 	def stop = timeWindowStop()
 	if (start && stop && getTimeZone()) {
-		result = timeOfDayIsBetween( (start - 30000), (stop - 30000), new Date(), getTimeZone())
+		result = timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
 	}
 	//log.debug "timeOk = $result"
 	result
 }
 
-private timeWindowStart() {
+private timeWindowStart(usehhmm=false) {
 	def result = null
 	if (startTimeType == "sunrise") {
 		result = location.currentState("sunriseTime")?.dateValue
@@ -510,13 +510,14 @@ private timeWindowStart() {
 		}
 	}
 	else if (starting && getTimeZone()) {
-		result = timeToday(starting, getTimeZone())
+		if(usehhmm) { result = timeToday(hhmm(starting), getTimeZone()) }
+		else { result = timeToday(starting, getTimeZone()) }
 	}
 	//log.debug "timeWindowStart = ${result}"
 	result
 }
 
-private timeWindowStop() {
+private timeWindowStop(usehhmm=false) {
 	def result = null
 	if (endTimeType == "sunrise") {
 		result = location.currentState("sunriseTime")?.dateValue
@@ -531,13 +532,14 @@ private timeWindowStop() {
 		}
 	}
 	else if (ending && getTimeZone()) {
-		result = timeToday(ending, getTimeZone())
+		if(usehhmm) { result = timeToday(hhmm(ending), getTimeZone()) }
+		else { result = timeToday(ending, getTimeZone()) }
 	}
 	//log.debug "timeWindowStop = ${result}"
 	result
 }
 
-private hhmm(time, fmt = "h:mm a") {
+private hhmm(time, fmt = "HH:mm") {
 	def t = timeToday(time, getTimeZone())
 	def f = new java.text.SimpleDateFormat(fmt)
 	f.setTimeZone(getTimeZone() ?: timeZone(time))
