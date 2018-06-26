@@ -274,6 +274,7 @@ def schedStartEnd() {
 
 def setSched() {
 	atomicState.schedRunning = true
+/*
 	def maxMin = 60
 	def timgcd = gcd([frequency_minutes, maxMin])
 	atomicState.timegcd = timgcd
@@ -289,6 +290,7 @@ def setSched() {
 
 	log.trace "scheduled using Cron (${random_int} ${timestr} * 1/1 * ? *)"
 	schedule("${random_int} ${timestr} * 1/1 * ? *", scheduleCheck)	// this runs every timgcd minutes
+*/
 	def delay = (falseAlarmThreshold != null && falseAlarmThreshold != "") ? falseAlarmThreshold * 60 : 2 * 60
 	runIn(delay, initCheck)
 }
@@ -314,6 +316,10 @@ def modeChangeHandler(evt) {
 }
 
 def initCheck() {
+	scheduleCheck(null)
+}
+
+def failsafe() {
 	scheduleCheck(null)
 }
 
@@ -409,7 +415,15 @@ def scheduleCheck(evt) {
 			on_during_active_lights.on()
 			log.trace "turned on ${on_during_active_lights}"
 		}
+		def delay = frequency_minutes
+		def random_int = random.nextInt(14)
+		log.trace "reschedule  ${delay} + ${random_int} minutes"
+		runIn( (delay+random_int)*60, initCheck, [overwrite: true])
+		runIn( (delay+random_int + 10)*60, failsafe, [overwrite: true])
 
+	} else if(allOk && getLastUpdSec() <= ((frequency_minutes - 1) * 60) ) {
+		log.trace "had to reschedule  ${getLastUpdSec()}, ${frequency_minutes*60}"
+		runIn( (frequency_minutes*60-getLastUpdSec()), initCheck, [overwrite: true])
 	} else if(people && someoneIsHome){
 		//don't turn off lights if anyone is home
 		if (atomicState?.schedRunning) {
