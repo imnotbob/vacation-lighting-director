@@ -501,7 +501,7 @@ private getSomeoneIsHome() {
 private getTimeOk() {
 	def result = true
 	def start = timeWindowStart()
-	def stop = timeWindowStop()
+	def stop = timeWindowStop(false, true)
 	if (start && stop && getTimeZone()) {
 		result = timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
 	}
@@ -531,7 +531,7 @@ private timeWindowStart(usehhmm=false) {
 	result
 }
 
-private timeWindowStop(usehhmm=false) {
+private timeWindowStop(usehhmm=false, adj=false) {
 	def result = null
 	if (endTimeType == "sunrise") {
 		result = location.currentState("sunriseTime")?.dateValue
@@ -549,7 +549,13 @@ private timeWindowStop(usehhmm=false) {
 		if(usehhmm) { result = timeToday(hhmm(ending), getTimeZone()) }
 		else { result = timeToday(ending, getTimeZone()) }
 	}
-	//log.debug "timeWindowStop = ${result}"
+	def result1
+	if(adj) { // small change for schedule skewing
+		result1 = new Date(result.time - (2*60*1000))
+		log.debug "timeWindowStop = ${result} adjusted: ${result1}"
+		result = result1
+	}
+	//log.debug "timeWindowStop = ${result} adjusted: ${result1}"
 	result
 }
 
