@@ -245,10 +245,10 @@ def initialize(){
 
 def clearState(turnOff = false) {
 	if(turnOff && atomicState?.Running) {
-		switches.off()
+ 		switches.off()
 		atomicState.vacactive_switches = []
 		if(on_during_active_lights) {
-			on_during_active_lights.off()
+ 			on_during_active_lights.off()
 		}
 		log.trace "All OFF"
 	}
@@ -258,6 +258,7 @@ def clearState(turnOff = false) {
 	atomicState.lastUpdDt = null
 	unschedule()
 }
+
 
 def schedStartEnd() {
 	if (starting != null || startTimeType != null) {
@@ -382,7 +383,7 @@ def scheduleCheck(evt) {
 				vacactive_switches = atomicState.vacactive_switches
 				if (vacactive_switches?.size()) {
 					for (int i = 0; i < vacactive_switches.size() ; i++) {
-						inactive_switches[vacactive_switches[i]].off()
+ 						inactive_switches[vacactive_switches[i]].off()
 						log.trace "turned off ${inactive_switches[vacactive_switches[i]]}"
 					}
 				}
@@ -405,14 +406,14 @@ def scheduleCheck(evt) {
 			vacactive_switches << random_int
 		}
 		for (int i = 0 ; i < vacactive_switches.size() ; i++) {
-			inactive_switches[vacactive_switches[i]].on()
+ 			inactive_switches[vacactive_switches[i]].on()
 			log.trace "turned on ${inactive_switches[vacactive_switches[i]]}"
 		}
 		atomicState.vacactive_switches = vacactive_switches
 		//log.trace "vacactive ${vacactive_switches} inactive ${inactive_switches}"
 
 		if(on_during_active_lights) {
-			on_during_active_lights.on()
+ 			on_during_active_lights.on()
 			log.trace "turned on ${on_during_active_lights}"
 		}
 		def delay = frequency_minutes
@@ -501,61 +502,73 @@ private getSomeoneIsHome() {
 private getTimeOk() {
 	def result = true
 	def start = timeWindowStart()
-	def stop = timeWindowStop(false, true)
+	def stop = timeWindowStop()
 	if (start && stop && getTimeZone()) {
-		result = timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
+		result = checkTimeCondition(startTimeType,  starting,  startTimeOffset,  endTimeType, ending, endTimeOffset)
+		//result = timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
 	}
-	//log.debug "timeOk = $result"
+	log.debug "timeOk = $result"
 	result
 }
 
+
 private timeWindowStart(usehhmm=false) {
 	def result = null
+	def sunTimes = app.getSunriseAndSunset()
+	if(!sunTimes.sunrise) {
+		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
+		return
+	}
 	if (startTimeType == "sunrise") {
-		result = location.currentState("sunriseTime")?.dateValue
+		result = sunTimes.sunrise.time
 		if (result && startTimeOffset) {
-			result = new Date(result.time + Math.round(startTimeOffset * 60000))
+			result = result + Math.round(startTimeOffset * 60000)
 		}
+		result = new Date(result)
 	}
 	else if (startTimeType == "sunset") {
-		result = location.currentState("sunsetTime")?.dateValue
+		result = sunTimes.sunset.time
 		if (result && startTimeOffset) {
-			result = new Date(result.time + Math.round(startTimeOffset * 60000))
+			result = result + Math.round(startTimeOffset * 60000)
 		}
+		result = new Date(result)
 	}
 	else if (starting && getTimeZone()) {
 		if(usehhmm) { result = timeToday(hhmm(starting), getTimeZone()) }
 		else { result = timeToday(starting, getTimeZone()) }
 	}
-	//log.debug "timeWindowStart = ${result}"
+	if(result && result.time < now()) { result = new Date(result.time+(24*60*60*1000)) }
+	log.debug "timeWindowStart = ${result}  ${formatDt(result)}"
 	result
 }
 
 private timeWindowStop(usehhmm=false, adj=false) {
 	def result = null
+	def sunTimes = app.getSunriseAndSunset()
+	if(!sunTimes.sunrise) {
+		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
+		return
+	}
 	if (endTimeType == "sunrise") {
-		result = location.currentState("sunriseTime")?.dateValue
+		result = sunTimes.sunrise.time
 		if (result && endTimeOffset) {
-			result = new Date(result.time + Math.round(endTimeOffset * 60000))
+			result = result + Math.round(endTimeOffset * 60000)
 		}
+		result = new Date(result)
 	}
 	else if (endTimeType == "sunset") {
-		result = location.currentState("sunsetTime")?.dateValue
+		result = sunTimes.sunset.time
 		if (result && endTimeOffset) {
-			result = new Date(result.time + Math.round(endTimeOffset * 60000))
+			result = result + Math.round(endTimeOffset * 60000)
 		}
+		result = new Date(result)
 	}
 	else if (ending && getTimeZone()) {
 		if(usehhmm) { result = timeToday(hhmm(ending), getTimeZone()) }
 		else { result = timeToday(ending, getTimeZone()) }
 	}
-	def result1
-	if(adj) { // small change for schedule skewing
-		result1 = new Date(result.time - (2*60*1000))
-		log.debug "timeWindowStop = ${result} adjusted: ${result1}"
-		result = result1
-	}
-	//log.debug "timeWindowStop = ${result} adjusted: ${result1}"
+	if(result && result.time < now()) { result = new Date(result.time+(24*60*60*1000)) }
+	log.debug "timeWindowStop = ${result} ${formatDt(result)}"
 	result
 }
 
@@ -564,6 +577,172 @@ private hhmm(time, fmt = "HH:mm") {
 	def f = new java.text.SimpleDateFormat(fmt)
 	f.setTimeZone(getTimeZone() ?: timeZone(time))
 	f.format(t)
+}
+
+//adjusts the time to local timezone
+private adjustTime(time = null) {
+	if (time instanceof String) {
+		//get UTC time
+		time = timeToday(time, location.timeZone).getTime()
+	}
+	if (time instanceof Date) {
+		//get unix time
+		time = time.getTime()
+	}
+	if (!time) {
+		time = now()
+	}
+	if (time) {
+		return new Date(time + location.timeZone.getOffset(time))
+	}
+	return null
+}
+
+private checkTimeCondition(timeFrom, timeFromCustom, timeFromOffset, timeTo, timeToCustom, timeToOffset) {
+	def time = adjustTime()
+	//convert to minutes since midnight
+	def tc = time.hours * 60 + time.minutes
+	def tf
+	def tt
+	def i = 0
+	while (i < 2) {
+		def t = null
+		def h = null
+		def m = null
+		switch(i == 0 ? timeFrom : timeTo) {
+			case "custom time":
+			case "time":
+				t = adjustTime(i == 0 ? timeFromCustom : timeToCustom)
+				if (i == 0) {
+					timeFromOffset = 0
+				} else {
+					timeToOffset = 0
+				}
+				break
+			case "sunrise":
+				t = getSunrise()
+				break
+			case "sunset":
+				t = getSunset()
+				break
+			case "noon":
+				h = 12
+				break
+			case "midnight":
+				h = (i == 0 ? 0 : 24)
+			break
+		}
+		if (h != null) {
+			m = 0
+		} else {
+			h = t.hours
+			m = t.minutes
+		}
+		switch (i) {
+			case 0:
+				tf = h * 60 + m + cast(timeFromOffset, "number")
+				break
+			case 1:
+				tt = h * 60 + m + cast(timeFromOffset, "number")
+				break
+		}
+		i += 1
+	}
+	//due to offsets, let's make sure all times are within 0-1440 minutes
+	while (tf < 0) tf += 1440
+	while (tf > 1440) tf -= 1440
+	while (tt < 0) tt += 1440
+	while (tt > 1440) tt -= 1440
+	if (tf < tt) {
+		return (tc >= tf) && (tc < tt)
+	} else {
+		return (tc < tt) || (tc >= tf)
+	}
+}
+
+private cast(value, dataType) {
+	def trueStrings = ["1", "on", "open", "locked", "active", "wet", "detected", "present", "occupied", "muted", "sleeping"]
+	def falseStrings = ["0", "false", "off", "closed", "unlocked", "inactive", "dry", "clear", "not detected", "not present", "not occupied", "unmuted", "not sleeping"]
+	switch (dataType) {
+		case "string":
+		case "text":
+			if (value instanceof Boolean) {
+				return value ? "true" : "false"
+			}
+			return value ? "$value" : ""
+		case "number":
+			if (value == null) return (int) 0
+			if (value instanceof String) {
+				if (value.isInteger())
+					return value.toInteger()
+				if (value.isFloat())
+					return (int) Math.floor(value.toFloat())
+				if (value in trueStrings)
+					return (int) 1
+			}
+			def result = (int) 0
+			try {
+				result = (int) value
+			} catch(all) {
+				result = (int) 0
+			}
+			return result ? result : (int) 0
+		case "long":
+			if (value == null) return (long) 0
+			if (value instanceof String) {
+				if (value.isInteger())
+					return (long) value.toInteger()
+				if (value.isFloat())
+					return (long) Math.round(value.toFloat())
+				if (value in trueStrings)
+					return (long) 1
+			}
+			def result = (long) 0
+			try {
+				result = (long) value
+			} catch(all) {
+			}
+			return result ? result : (long) 0
+		case "decimal":
+			if (value == null) return (float) 0
+			if (value instanceof String) {
+				if (value.isFloat())
+					return (float) value.toFloat()
+				if (value.isInteger())
+					return (float) value.toInteger()
+				if (value in trueStrings)
+					return (float) 1
+			}
+			def result = (float) 0
+			try {
+				result = (float) value
+			} catch(all) {
+			}
+			return result ? result : (float) 0
+		case "boolean":
+			if (value instanceof String) {
+				if (!value || (value in falseStrings))
+					return false
+				return true
+			}
+			return !!value
+		case "time":
+			return value instanceof String ? adjustTime(value).time : cast(value, "long")
+		case "vector3":
+			return value instanceof String ? adjustTime(value).time : cast(value, "long")
+	}
+	return value
+}
+
+//TODO is this expensive?
+private getSunrise() {
+	def sunTimes = app.getSunriseAndSunset()
+	return adjustTime(sunTimes.sunrise)
+}
+
+private getSunset() {
+	def sunTimes = app.getSunriseAndSunset()
+	return adjustTime(sunTimes.sunset)
 }
 
 private timeIntervalLabel() {
