@@ -3,6 +3,8 @@ ERS update to tslagle's vacation-lighting-director
 
 https://community.smartthings.com/t/new-app-vacation-light-director/7230/265
 
+https://community.hubitat.com/t/vacation-lighting-anyone-have-it-running/1454/25
+
 Inputs:
 
 Setup
