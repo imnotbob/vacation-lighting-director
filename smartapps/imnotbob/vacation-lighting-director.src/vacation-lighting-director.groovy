@@ -120,7 +120,7 @@ def Setup() {
 	return dynamicPage(pageProperties) {
 
 		section(""){
-			paragraph "In this section you need to setup the deatils of how you want your lighting to be affected while " +
+			paragraph "In this section you need to setup the details of how you want your lighting to be affected while " +
 				"you are away.	All of these settings are required in order for the simulator to run correctly."
 		}
 		section("Simulator Triggers") {
