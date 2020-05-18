@@ -1,0 +1,19 @@
+{
+  "packageName": "Vacation Lighting Directory",
+  "author": "nh.schottfam",
+  "minimumHEVersion": "2.1.9",
+  "dateReleased": "2020-05-18",
+  "apps": [
+    {
+      "id": "2e5a2003-34ff-446d-9f5c-098c7f7fd8fc",
+      "name": "Vacation Lighting Director",
+      "namespace": "imnotbob",
+      "location": "https://raw.githubusercontent.com/imnotbob/vacation-lighting-director/beta/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-director.groovy",
+      "required": true,
+      "oauth": false
+    }
+  ],
+  "version": "1.0.0",
+  "releaseNotes": "Latest release",
+  "communityLink": "https://community.hubitat.com/t/vacation-lighting-anyone-have-it-running/1454/25"
+}
