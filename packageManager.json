@@ -2,7 +2,7 @@
   "packageName": "Vacation Lighting Director",
   "author": "nh.schottfam",
   "minimumHEVersion": "2.1.9",
-  "dateReleased": "2020-05-18",
+  "dateReleased": "2020-05-26",
   "apps": [
     {
       "id": "2e5a2003-34ff-446d-9f5c-098c7f7fd8fc",
@@ -13,7 +13,7 @@
       "oauth": false
     }
   ],
-  "version": "1.0.0",
-  "releaseNotes": "Latest release",
+  "version": "1.0.1",
+  "releaseNotes": "Latest release - cleanups",
   "communityLink": "https://community.hubitat.com/t/vacation-lighting-anyone-have-it-running/1454/25"
 }

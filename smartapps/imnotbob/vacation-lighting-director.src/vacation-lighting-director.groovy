@@ -218,20 +218,20 @@ def timeIntervalPage() {
 	}
 }
 
-def installed() {
+void installed() {
 	atomicState.Running = false
 	atomicState.schedRunning = false
 	atomicState.startendRunning = false
 	initialize()
 }
 
-def updated() {
+void updated() {
 	unsubscribe();
 	clearState(true)
 	initialize()
 }
 
-def initialize(){
+void initialize(){
 	if (newMode != null) {
 		subscribe(location, modeChangeHandler)
 	}
@@ -243,7 +243,7 @@ def initialize(){
 	setSched()
 }
 
-def clearState(turnOff = false) {
+void clearState(turnOff = false) {
 	if(turnOff && atomicState?.Running) {
  		switches.off()
 		atomicState.vacactive_switches = []
@@ -260,20 +260,20 @@ def clearState(turnOff = false) {
 }
 
 
-def schedStartEnd() {
+void schedStartEnd() {
 	if (starting != null || startTimeType != null) {
-		def start = timeWindowStart(true)
+		Date start = timeWindowStart(true)
 		schedule(start, startTimeCheck)
 		atomicState.startendRunning = true
 	}
 	if (ending != null || endTimeType != null) {
-		def end = timeWindowStop(true)
+		Date end = timeWindowStop(true)
 		schedule(end, endTimeCheck)
 		atomicState.startendRunning = true
 	}
 }
 
-def setSched() {
+void setSched() {
 	atomicState.schedRunning = true
 /*
 	def maxMin = 60
@@ -292,10 +292,10 @@ def setSched() {
 	log.trace "scheduled using Cron (${random_int} ${timestr} * 1/1 * ? *)"
 	schedule("${random_int} ${timestr} * 1/1 * ? *", scheduleCheck)	// this runs every timgcd minutes
 */
-	def delay = (falseAlarmThreshold != null && falseAlarmThreshold != "") ? falseAlarmThreshold * 60 : 2 * 60
+	Integer delay = (falseAlarmThreshold != null && falseAlarmThreshold != "") ? falseAlarmThreshold * 60 : 2 * 60
 	runIn(delay, initCheck)
 }
-
+/*
 private gcd(a, b) {
 	while (b > 0) {
 		long temp = b;
@@ -306,40 +306,40 @@ private gcd(a, b) {
 }
 
 private gcd(input = []) {
-	long result = input[0];
-	for(int i = 1; i < input.size; i++) result = gcd(result, input[i]);
+	Long result = input[0];
+	for(Integer i = 1; i < input.size; i++) result = gcd(result, input[i]);
 	return result;
 }
-
-def modeChangeHandler(evt) {
+*/
+void modeChangeHandler(evt) {
 	log.trace "modeChangeHandler ${evt}"
 	setSched()
 }
 
-def initCheck() {
+void initCheck() {
 	scheduleCheck(null)
 }
 
-def failsafe() {
+void failsafe() {
 	scheduleCheck(null)
 }
 
-def startTimeCheck() {
+void startTimeCheck() {
 	log.trace "startTimeCheck"
 	setSched()
 }
 
-def endTimeCheck() {
+void endTimeCheck() {
 	log.trace "endTimeCheck"
 	scheduleCheck(null)
 }
 
-def getDtNow() {
-	def now = new Date()
+String getDtNow() {
+	Date now = new Date()
 	return formatDt(now)
 }
 
-def formatDt(dt) {
+String formatDt(dt) {
 	def tf = new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
 	if(getTimeZone()) { tf.setTimeZone(getTimeZone()) }
 	else {
@@ -348,13 +348,12 @@ def formatDt(dt) {
 	return tf.format(dt)
 }
 
-def GetTimeDiffSeconds(lastDate) {
-	if(lastDate?.contains("dtNow")) { return 10000 }
-	def now = new Date()
-	def lastDt = Date.parse("E MMM dd HH:mm:ss z yyyy", lastDate)
-	def start = Date.parse("E MMM dd HH:mm:ss z yyyy", formatDt(lastDt)).getTime()
-	def stop = Date.parse("E MMM dd HH:mm:ss z yyyy", formatDt(now)).getTime()
-	def diff = (int) (long) (stop - start) / 1000
+Long GetTimeDiffSeconds(String lastDate) {
+	if(lastDate?.contains("dtNow")) { return 10000L }
+	Date now = new Date()
+	Long start = Date.parse("E MMM dd HH:mm:ss z yyyy", lastDate).getTime()
+	Long stop = now.getTime()
+	Long diff = (stop - start) / 1000L
 	return diff
 }
 
@@ -365,11 +364,11 @@ def getTimeZone() {
 	return tz
 }
 
-def getLastUpdSec() { return !atomicState?.lastUpdDt ? 100000 : GetTimeDiffSeconds(atomicState?.lastUpdDt).toInteger() }
+Integer getLastUpdSec() { return !atomicState?.lastUpdDt ? 100000 : GetTimeDiffSeconds(atomicState?.lastUpdDt).toInteger() }
 
 //Main logic to pick a random set of lights from the large set of lights to turn on and then turn the rest off
 
-def scheduleCheck(evt) {
+void scheduleCheck(evt) {
 	if(allOk && getLastUpdSec() > ((frequency_minutes - 1) * 60) ) {
 		atomicState?.lastUpdDt = getDtNow()
 		log.debug("Running")
@@ -382,7 +381,7 @@ def scheduleCheck(evt) {
 			if (atomicState?.vacactive_switches) {
 				vacactive_switches = atomicState.vacactive_switches
 				if (vacactive_switches?.size()) {
-					for (int i = 0; i < vacactive_switches.size() ; i++) {
+					for (Integer i = 0; i < vacactive_switches.size() ; i++) {
  						inactive_switches[vacactive_switches[i]].off()
 						log.trace "turned off ${inactive_switches[vacactive_switches[i]]}"
 					}
@@ -396,16 +395,16 @@ def scheduleCheck(evt) {
 		def numlight = number_of_active_lights
 		if (numlight > inactive_switches.size()) { numlight = inactive_switches.size() }
 		log.trace "inactive switches: ${inactive_switches.size()} numlight: ${numlight}"
-		for (int i = 0 ; i < numlight ; i++) {
+		for (Integer i = 0 ; i < numlight ; i++) {
 
 			// grab a random switch to turn on
-			def random_int = random.nextInt(inactive_switches.size())
+			Integer random_int = random.nextInt(inactive_switches.size())
 			while (vacactive_switches?.contains(random_int)) {
 				random_int = random.nextInt(inactive_switches.size())
 			}
 			vacactive_switches << random_int
 		}
-		for (int i = 0 ; i < vacactive_switches.size() ; i++) {
+		for (Integer i = 0 ; i < vacactive_switches.size() ; i++) {
  			inactive_switches[vacactive_switches[i]].on()
 			log.trace "turned on ${inactive_switches[vacactive_switches[i]]}"
 		}
@@ -416,8 +415,8 @@ def scheduleCheck(evt) {
  			on_during_active_lights.on()
 			log.trace "turned on ${on_during_active_lights}"
 		}
-		def delay = frequency_minutes
-		def random_int = random.nextInt(14)
+		Integer delay = frequency_minutes
+		Integer random_int = random.nextInt(14)
 		log.trace "reschedule  ${delay} + ${random_int} minutes"
 		runIn( (delay+random_int)*60, initCheck, [overwrite: true])
 		runIn( (delay+random_int + 10)*60, failsafe, [overwrite: true])
@@ -445,23 +444,22 @@ def scheduleCheck(evt) {
 	if (!atomicState.startendRunning) {
 		schedStartEnd()
 	}
-	return true
 }
 
 //below is used to check restrictions
-private getAllOk() {
+Boolean getAllOk() {
 	modeOk && daysOk && timeOk && homeIsEmpty
 }
 
 
-private getModeOk() {
-	def result = !newMode || newMode.contains(location.mode)
+Boolean getModeOk() {
+	Boolean result = !newMode || newMode.contains(location.mode)
 	//log.trace "modeOk = $result"
 	result
 }
 
-private getDaysOk() {
-	def result = true
+Boolean getDaysOk() {
+	Boolean result = true
 	if (days) {
 		def df = new java.text.SimpleDateFormat("EEEE")
 		if (getTimeZone()) {
@@ -477,8 +475,8 @@ private getDaysOk() {
 	result
 }
 
-private getHomeIsEmpty() {
-	def result = true
+Boolean getHomeIsEmpty() {
+	Boolean result = true
 
 	if(people?.findAll { it?.currentPresence == "present" }) {
 		result = false
@@ -489,8 +487,8 @@ private getHomeIsEmpty() {
 	return result
 }
 
-private getSomeoneIsHome() {
-	def result = false
+Boolean getSomeoneIsHome() {
+	Boolean result = false
 
 	if(people?.findAll { it?.currentPresence == "present" }) {
 		result = true
@@ -499,10 +497,10 @@ private getSomeoneIsHome() {
 	return result
 }
 
-private getTimeOk() {
-	def result = true
-	def start = timeWindowStart()
-	def stop = timeWindowStop()
+Boolean getTimeOk() {
+	Boolean result = true
+	Date start = timeWindowStart()
+	Date stop = timeWindowStop()
 	if (start && stop && getTimeZone()) {
 		result = checkTimeCondition(startTimeType,  starting,  startTimeOffset,  endTimeType, ending, endTimeOffset)
 		//result = timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
@@ -512,26 +510,27 @@ private getTimeOk() {
 }
 
 
-private timeWindowStart(usehhmm=false) {
-	def result = null
+Date timeWindowStart(usehhmm=false) {
+	Long lresult
+	Date result = null
 	def sunTimes = app.getSunriseAndSunset()
 	if(!sunTimes.sunrise) {
 		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
 		return
 	}
 	if (startTimeType == "sunrise") {
-		result = sunTimes.sunrise.time
-		if (result && startTimeOffset) {
-			result = result + Math.round(startTimeOffset * 60000)
+		lresult = sunTimes.sunrise.time
+		if (lresult && startTimeOffset) {
+			lresult = lresult + Math.round(startTimeOffset * 60000)
 		}
-		result = new Date(result)
+		result = new Date(lresult)
 	}
 	else if (startTimeType == "sunset") {
-		result = sunTimes.sunset.time
-		if (result && startTimeOffset) {
-			result = result + Math.round(startTimeOffset * 60000)
+		lresult = sunTimes.sunset.time
+		if (lresult && startTimeOffset) {
+			lresult = lresult + Math.round(startTimeOffset * 60000)
 		}
-		result = new Date(result)
+		result = new Date(lresult)
 	}
 	else if (starting && getTimeZone()) {
 		if(usehhmm) { result = timeToday(hhmm(starting), getTimeZone()) }
@@ -542,26 +541,27 @@ private timeWindowStart(usehhmm=false) {
 	result
 }
 
-private timeWindowStop(usehhmm=false, adj=false) {
-	def result = null
+Date timeWindowStop(usehhmm=false, adj=false) {
+	Long lresult = null
+	Date result = null
 	def sunTimes = app.getSunriseAndSunset()
 	if(!sunTimes.sunrise) {
 		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
 		return
 	}
 	if (endTimeType == "sunrise") {
-		result = sunTimes.sunrise.time
-		if (result && endTimeOffset) {
-			result = result + Math.round(endTimeOffset * 60000)
+		lresult = sunTimes.sunrise.time
+		if (lresult && endTimeOffset) {
+			lresult = lresult + Math.round(endTimeOffset * 60000)
 		}
-		result = new Date(result)
+		result = new Date(lresult)
 	}
 	else if (endTimeType == "sunset") {
-		result = sunTimes.sunset.time
-		if (result && endTimeOffset) {
-			result = result + Math.round(endTimeOffset * 60000)
+		lresult = sunTimes.sunset.time
+		if (lresult && endTimeOffset) {
+			lresult = lresult + Math.round(endTimeOffset * 60000)
 		}
-		result = new Date(result)
+		result = new Date(lresult)
 	}
 	else if (ending && getTimeZone()) {
 		if(usehhmm) { result = timeToday(hhmm(ending), getTimeZone()) }
@@ -572,15 +572,15 @@ private timeWindowStop(usehhmm=false, adj=false) {
 	result
 }
 
-private hhmm(time, fmt = "HH:mm") {
-	def t = timeToday(time, getTimeZone())
+String hhmm(time, fmt = "HH:mm") {
+	Date t = timeToday(time, getTimeZone())
 	def f = new java.text.SimpleDateFormat(fmt)
 	f.setTimeZone(getTimeZone() ?: timeZone(time))
 	f.format(t)
 }
 
 //adjusts the time to local timezone
-private adjustTime(time = null) {
+Date adjustTime(time = null) {
 	if (time instanceof String) {
 		//get UTC time
 		time = timeToday(time, location.timeZone).getTime()
@@ -593,20 +593,21 @@ private adjustTime(time = null) {
 		time = now()
 	}
 	if (time) {
-		return new Date(time + location.timeZone.getOffset(time))
+		if(time > now()) return new Date(time + (Integer)location.timeZone.getOffset(time) - (Integer)location.timeZone.getOffset(now()))
+		return new Date(time)
 	}
 	return null
 }
 
-private checkTimeCondition(timeFrom, timeFromCustom, timeFromOffset, timeTo, timeToCustom, timeToOffset) {
-	def time = adjustTime()
+Boolean checkTimeCondition(timeFrom, timeFromCustom, timeFromOffset, timeTo, timeToCustom, timeToOffset) {
+	Date time = new Date()
 	//convert to minutes since midnight
-	def tc = time.hours * 60 + time.minutes
-	def tf
-	def tt
-	def i = 0
+	Integer tc = time.hours * 60 + time.minutes
+	Integer tf
+	Integer tt
+	Integer i = 0
 	while (i < 2) {
-		def t = null
+		Date t = null
 		def h = null
 		def m = null
 		switch(i == 0 ? timeFrom : timeTo) {
@@ -671,54 +672,54 @@ private cast(value, dataType) {
 			}
 			return value ? "$value" : ""
 		case "number":
-			if (value == null) return (int) 0
+			if (value == null) return (Integer) 0
 			if (value instanceof String) {
 				if (value.isInteger())
 					return value.toInteger()
 				if (value.isFloat())
-					return (int) Math.floor(value.toFloat())
+					return (Integer) Math.floor(value.toFloat())
 				if (value in trueStrings)
-					return (int) 1
+					return (Integer) 1
 			}
-			def result = (int) 0
+			def result = (Integer) 0
 			try {
-				result = (int) value
+				result = (Integer) value
 			} catch(all) {
-				result = (int) 0
+				result = (Integer) 0
 			}
-			return result ? result : (int) 0
+			return result ? result : (Integer) 0
 		case "long":
-			if (value == null) return (long) 0
+			if (value == null) return 0L
 			if (value instanceof String) {
 				if (value.isInteger())
-					return (long) value.toInteger()
+					return (Long) value.toInteger()
 				if (value.isFloat())
-					return (long) Math.round(value.toFloat())
+					return (Long) Math.round(value.toFloat())
 				if (value in trueStrings)
-					return (long) 1
+					return 1L
 			}
-			def result = (long) 0
+			Long result = 0L
 			try {
-				result = (long) value
+				result = (Long) value
 			} catch(all) {
 			}
-			return result ? result : (long) 0
+			return result ? result : 0L
 		case "decimal":
-			if (value == null) return (float) 0
+			if (value == null) return (Float)0
 			if (value instanceof String) {
 				if (value.isFloat())
-					return (float) value.toFloat()
+					return (Float) value.toFloat()
 				if (value.isInteger())
-					return (float) value.toInteger()
+					return (Float) value.toInteger()
 				if (value in trueStrings)
-					return (float) 1
+					return (Float) 1
 			}
-			def result = (float) 0
+			def result = (Float) 0
 			try {
-				result = (float) value
+				result = (Float) value
 			} catch(all) {
 			}
-			return result ? result : (float) 0
+			return result ? result : (Float) 0
 		case "boolean":
 			if (value instanceof String) {
 				if (!value || (value in falseStrings))
@@ -726,27 +727,23 @@ private cast(value, dataType) {
 				return true
 			}
 			return !!value
-		case "time":
-			return value instanceof String ? adjustTime(value).time : cast(value, "long")
-		case "vector3":
-			return value instanceof String ? adjustTime(value).time : cast(value, "long")
 	}
 	return value
 }
 
 //TODO is this expensive?
-private getSunrise() {
+Date getSunrise() {
 	def sunTimes = app.getSunriseAndSunset()
 	return adjustTime(sunTimes.sunrise)
 }
 
-private getSunset() {
+Date getSunset() {
 	def sunTimes = app.getSunriseAndSunset()
 	return adjustTime(sunTimes.sunset)
 }
 
-private timeIntervalLabel() {
-	def start = ""
+String timeIntervalLabel() {
+	String start = ""
 	switch (startTimeType) {
 		case "time":
 			if (starting) {
@@ -757,12 +754,12 @@ private timeIntervalLabel() {
 		case "sunset":
 			start += startTimeType[0].toUpperCase() + startTimeType[1..-1]
 			if (startTimeOffset) {
-				start += startTimeOffset > 0 ? "+${startTimeOffset} min" : "${startTimeOffset} min"
+				start += startTimeOffset > 0 ? "+${startTimeOffset} min".toString() : "${startTimeOffset} min".toString()
 			}
 			break
 	}
 
-	def finish = ""
+	String finish = ""
 	switch (endTimeType) {
 		case "time":
 			if (ending) {
@@ -773,16 +770,16 @@ private timeIntervalLabel() {
 		case "sunset":
 			finish += endTimeType[0].toUpperCase() + endTimeType[1..-1]
 			if (endTimeOffset) {
-				finish += endTimeOffset > 0 ? "+${endTimeOffset} min" : "${endTimeOffset} min"
+				finish += endTimeOffset > 0 ? "+${endTimeOffset} min".toString() : "${endTimeOffset} min".toString()
 			}
 			break
 	}
-	start && finish ? "${start} to ${finish}" : ""
+	start && finish ? "${start} to ${finish}".toString() : ""
 }
 
 //sets complete/not complete for the setup section on the main dynamic page
-def greyedOut(){
-	def result = ""
+String greyedOut(){
+	String result = ""
 	if (switches) {
 		result = "complete"		
 	}
@@ -790,8 +787,8 @@ def greyedOut(){
 }
 
 //sets complete/not complete for the settings section on the main dynamic page
-def greyedOutSettings(){
-	def result = ""
+String greyedOutSettings(){
+	String result = ""
 	if (people || days || falseAlarmThreshold ) {
 		result = "complete"		
 	}
