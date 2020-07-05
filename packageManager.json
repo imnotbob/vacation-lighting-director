@@ -10,7 +10,8 @@
       "namespace": "imnotbob",
       "location": "https://raw.githubusercontent.com/imnotbob/vacation-lighting-director/beta/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-director.groovy",
       "required": true,
-      "oauth": false
+      "oauth": false,
+      "primary": true
     }
   ],
   "version": "1.0.1",
