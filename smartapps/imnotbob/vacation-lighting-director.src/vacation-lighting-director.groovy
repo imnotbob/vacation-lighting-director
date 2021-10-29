@@ -1,15 +1,13 @@
 /**
  *	Vacation Lighting Director  (based off of tslagle's original)
+ *	Optimized for Hubitat
  *	Supports Longer interval times (up to 180 mins)
- *	Only turns off lights it turned on (vs calling to turn all off)
- * 
- *	Updated to turn on a set of lights during active time, and turn them off at end of vacation time
+ *	Only turns off lights it turned on (vs calling to turn all off) during normal cycling
+ *
+ *	Updated to turn on a set of lights during active time, and turn them off at end of active time
  *
  *	Source code can be found here:
- *	https://github.com/imnotbob/vacation-lighting-director/blob/master/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-director.groovy
- *
- *	Copyright 2017 Eric Schott
- *	Last update July 13, 2020
+ *	https://github.com/imnotbob/vacation-lighting-director/blob/beta/smartapps/imnotbob/vacation-lighting-director.src/vacation-lighting-director.groovy
  *
  *	Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except
  *	in compliance with the License. You may obtain a copy of the License at:
@@ -21,11 +19,18 @@
  *	for the specific language governing permissions and limitations under the License.
  *
  */
+//file:noinspection GrDeprecatedAPIUsage
+//file:noinspection GroovySillyAssignment
+//file:noinspection unused
 
 import java.text.SimpleDateFormat
 import groovy.transform.Field
 
-// Automatically generated. Make future change here.
+@Field static final String sMyName = 'Vaction Lighting Director'
+@Field static final String appVersionFLD ='1.1.0.0'
+//@Field static final String appModifiedFLD='2021-10-29'
+
+// Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
 definition(
 	name: "Vacation Lighting Director",
 	namespace: "imnotbob",
@@ -33,10 +38,11 @@ definition(
 	category: "Safety & Security",
 	description: "Randomly turn on/off lights to simulate the appearance of a occupied home while you are away.",
 	iconUrl: "http://icons.iconarchive.com/icons/custom-icon-design/mono-general-2/512/settings-icon.png",
-	iconX2Url: "http://icons.iconarchive.com/icons/custom-icon-design/mono-general-2/512/settings-icon.png"
+	iconX2Url: "http://icons.iconarchive.com/icons/custom-icon-design/mono-general-2/512/settings-icon.png" //,
+	// singleInstance: false
 )
 
-preferences {
+preferences{
 	page(name:"pageSetup")
 	page(name:"Setup")
 	page(name:"Settings")
@@ -90,7 +96,7 @@ def Setup(){
 
 	Map frequency_minutes=[
 		name:				"frequency_minutes",
-		type:				"number",
+		type:				sNUMBR,
 		title:				"Minutes? (5-180)",
 		range:				"5..180",
 		required:			true
@@ -98,7 +104,7 @@ def Setup(){
 
 	Map number_of_active_lights=[
 		name:				"number_of_active_lights",
-		type:				"number",
+		type:				sNUMBR,
 		title:				"Number of active lights",
 		required:			true,
 	]
@@ -111,7 +117,7 @@ def Setup(){
 		required:			false
 	]
 
-	def pageName="Setup"
+//	def pageName="Setup"
 
 	Map pageProperties=[
 		name:		"Setup",
@@ -162,7 +168,7 @@ def Settings(){
 		options:	["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 	]
 
-	def pageName="Settings"
+//	def pageName="Settings"
 
 	Map pageProperties=[
 		name:		"Settings",
@@ -181,7 +187,7 @@ def Settings(){
 	return dynamicPage(pageProperties){
 
 		section(""){
-			paragraph "Restrict how your simulator runs.  For instance you can restrict on which days it will run " +
+			paragraph "Restrict how your simulator runs. For instance you can restrict on which days it will run " +
 				"as well as a delay for the simulator to start after it is in the correct mode.	Delaying the simulator helps with false starts based on a incorrect mode change."
 		}
 		section("Delay to start simulator"){
@@ -194,26 +200,34 @@ def Settings(){
 		section("More options"){
 			input days
 		}
+		section("More options"){
+			input(
+					'debugLogging',
+					'bool',
+					title: 'Enable debug logging',
+					defaultValue: false,
+					submitOnChange: true
+			)
+		}
 	}
 }
 
 def timeIntervalPage(){
 	dynamicPage(name: "timeIntervalPage", title: "Only during a certain time"){
-		section {
+		section{
 			input "startTimeType", "enum", title: "Starting at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], submitOnChange:true
-			if(startTimeType in [sSUNRISE,sSUNSET]){
-				input "startTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
+			if((String)settings.startTimeType in [sSUNRISE,sSUNSET]){
+				input "startTimeOffset", sNUMBR, title: "Offset in minutes (+/-)", range: "*..*", required: false
 			}
-			else {
+			else{
 				input "starting", "time", title: "Start time", required: false
 			}
 		}
-		section {
+		section{
 			input "endTimeType", "enum", title: "Ending at", options: [["time": "A specific time"], ["sunrise": "Sunrise"], ["sunset": "Sunset"]], submitOnChange:true
-			if(endTimeType in [sSUNRISE,sSUNSET]){
-				input "endTimeOffset", "number", title: "Offset in minutes (+/-)", range: "*..*", required: false
-			}
-			else {
+			if((String)settings.endTimeType in [sSUNRISE,sSUNSET]){
+				input "endTimeOffset", sNUMBR, title: "Offset in minutes (+/-)", range: "*..*", required: false
+			}else{
 				input "ending", "time", title: "End time", required: false
 			}
 		}
@@ -221,7 +235,7 @@ def timeIntervalPage(){
 }
 
 @Field static final String sNULL=(String)null
-@Field static final String sBLK=""
+@Field static final String sBLK=''
 @Field static final String sLONG='long'
 @Field static final String sNUMBR='number'
 @Field static final String sTRUE='true'
@@ -230,142 +244,175 @@ def timeIntervalPage(){
 @Field static final String sSUNRISE='sunrise'
 @Field static final String sSUNSET='sunset'
 
+@Field volatile static Map<String,Map> theCacheVFLD=[:]
+
 void installed(){
-	atomicState.Running=false
-	atomicState.schedRunning=false
-	atomicState.startendRunning=false
+	clearState()
 	initialize()
 }
 
 void updated(){
+	logTrace "updated"
 	unsubscribe()
 	clearState(true)
 	initialize()
+	if (settings.debugLogging) runIn(7200, logsOff)
+}
+
+void logsOff(){
+	logWarn "${app.label} debug logging disabled..."
+	app.updateSetting("debugLogging",[value:sFALSE,type:"bool"])
 }
 
 void initialize(){
-	if(newMode != null){
+	subscribe(location, "systemStart", modeChangeHandler)
+	if(settings.newMode != null){
 		subscribe(location, "mode", modeChangeHandler)
 	}
 	schedStartEnd()
-	if(people){
-		subscribe(people, "presence", modeChangeHandler)
+	if(settings.people){
+		subscribe(settings.people, "presence", modeChangeHandler)
 	}
-	log.debug "Installed with settings: ${settings}"
+	logDebug "Initialized with settings: ${settings}"
 	setSched()
 }
 
 void clearState(Boolean turnOff=false){
-	if(turnOff && (Boolean)atomicState.Running){
- 		switches.off()
-		atomicState.vacactive_switches=[]
-		if(on_during_active_lights){
- 			on_during_active_lights.off()
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+
+	Boolean running=((Boolean)fld.Running || (Boolean)state.Running)
+
+	if(turnOff && running){
+		((List)settings.switches).each { it ->
+			changeSwitch(it,'off')
 		}
-		log.trace "All OFF"
+		//settings.switches*.off()
+		if(settings.on_during_active_lights){
+			((List)settings.on_during_active_lights).each{ it ->
+				changeSwitch(it,'off')
+			}
+		//	settings.on_during_active_lights*.off()
+		}
+		logInfo "All OFF"
 	}
-	atomicState.Running=false
-	atomicState.schedRunning=false
-	atomicState.startendRunning=false
-	atomicState.lastUpdDt=sNULL
-	unschedule()
+	clearSched()
+	fld.Running=false
+	fld.lastUpdDt=sNULL
+	fld.vacactive_switches=[]
+	theCacheVFLD[myId]=fld
+	theCacheVFLD=theCacheVFLD
+	state.Running=false
+	state.lastUpdDt=sNULL
+	state.vacactive_switches=[]
 }
 
 
 void schedStartEnd(){
-	def sunTimes=app.getSunriseAndSunset()
+	logTrace "schedStartEnd"
+	Map sunTimes=app.getSunriseAndSunset()
 	if(!sunTimes.sunrise){
-		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
+		logWarn "Actual sunrise and sunset times unavailable, please reset hub location"
 		return
 	}
-	Boolean running=(Boolean)atomicState.startendRunning
-	Date start
-	if(starting != null || startTimeType != sNULL){
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+
+	Boolean running= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
+	Date start=null
+	if(settings.starting != null || (String)settings.startTimeType != sNULL){
 		start=timeWindowStart(sunTimes, true)
-		if(start && !((Long)start.time > now()) ) start=new Date((Long)start.time+(24*60*60*1000L))
-		log.debug "Scheduling start $start"
+		if(start && !((Long)start.getTime() > now()) ) start=new Date((Long)start.getTime()+(24*60*60*1000L))
+		logDebug "Scheduling start $start"
 		schedule(start, startTimeCheck)
 		running=true
 	}
-	if(ending != null || endTimeType != sNULL){
+	if(settings.ending != null || (String)settings.endTimeType != sNULL){
 		Date end=timeWindowStop(sunTimes, start, true)
-		if(end && !((Long)end.time > now()) ) end=new Date((Long)end.time+(24*60*60*1000L))
-		log.debug "Scheduling end $end"
+		if(end && !((Long)end.getTime() > now()) ) end=new Date((Long)end.getTime()+(24*60*60*1000L))
+		logDebug "Scheduling end $end"
 		schedule(end, endTimeCheck)
 		running=true
 	}
-/*	if(!running){
-		schedule(timeTodayAfter('23:59', '00:01', location.timezone), initCheck1)
-		running=true
-	}*/
-	atomicState.startendRunning=running
+	fld.startendRunning=running
+	theCacheVFLD[myId]=fld
+	theCacheVFLD=theCacheVFLD
+	state.startendRunning=running
 }
 
 void setSched(){
-	atomicState.schedRunning=true
-/*
-	def maxMin=60
-	def timgcd=gcd([frequency_minutes, maxMin])
-	atomicState.timegcd=timgcd
-	def random=new Random()
-	def random_int=random.nextInt(60)
-	def random_dint=random.nextInt(timgcd.toInteger())
-
-	def newDate=new Date()
-	def curMin=newDate.format("m", getTimeZone())
-
-	def timestr="${random_dint}/${timgcd}"
-	if(timgcd == 60){ timestr="${curMin}" }
-
-	log.trace "scheduled using Cron (${random_int} ${timestr} * 1/1 * ? *)"
-	schedule("${random_int} ${timestr} * 1/1 * ? *", scheduleCheck)	// this runs every timgcd minutes
-*/
-	Integer delay=(falseAlarmThreshold != null && falseAlarmThreshold != sBLK) ? falseAlarmThreshold * 60 : 2 * 60
-	runIn(delay, initCheck)
-}
-/*
-private gcd(a, b){
-	while (b > 0){
-		long temp=b;
-		b=a % b;
-		a=temp;
+	Integer delay=(settings.falseAlarmThreshold != null && settings.falseAlarmThreshold != sBLK) ? settings.falseAlarmThreshold * 60 : 120 // 2 * 60
+	delay= delay<0 || delay>300 ? 120 : delay
+	logTrace "setSched - schedule a check in $delay seconds"
+	if(delay>0) {
+		runIn(delay, initCheck)
+		String myId=app.id.toString()
+		Map fld=theCacheVFLD[myId] ?: [:]
+		fld.schedRunning=true
+		theCacheVFLD[myId]=fld
+		theCacheVFLD=theCacheVFLD
+		state.schedRunning=true
 	}
-	return a;
+	else initCheck()
 }
 
-private gcd(input=[]){
-	Long result=input[0];
-	for(Integer i=1; i < input.size; i++) result=gcd(result, input[i]);
-	return result;
-}
-*/
 void modeChangeHandler(evt){
-	log.trace "modeChangeHandler Event Name ${evt.name} event value: ${evt.value}"
+	logTrace "modeChangeHandler Event Name ${evt.name} event value: ${evt.value}"
 	setSched()
 }
 
-void initCheck1(){
-	unschedule()
-	atomicState.startendRunning=false
-	scheduleCheck(null)
+void clearSched(){
+	unschedule('endTimeCheck')
+	unschedule('startTimeCheck')
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+	fld.startendRunning=false
+	theCacheVFLD[myId]=fld
+	theCacheVFLD=theCacheVFLD
+	state.startendRunning=false
+	clearSched1()
 }
+
+void clearSched1(){
+	unschedule('initCheck')
+	unschedule('failsafe')
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+	fld.schedRunning=false
+	theCacheVFLD[myId]=fld
+	theCacheVFLD=theCacheVFLD
+	state.schedRunning=false
+}
+
+// likely not needed
+/*
+void initCheck1(){
+	logTrace "initCheck1"
+	clearSched()
+	scheduleCheck()
+} */
 
 void initCheck(){
-	scheduleCheck(null)
+	logTrace "initCheck"
+	clearSched1()
+	scheduleCheck()
 }
 
+// likely not needed
 void failsafe(){
-	scheduleCheck(null)
+	logWarn "failsafe run"
+	clearSched1()
+	scheduleCheck()
 }
 
 void startTimeCheck(){
-	log.trace "startTimeCheck"
+	logTrace "startTimeCheck"
 	setSched()
 }
 
 void endTimeCheck(){
-	log.trace "endTimeCheck"
-	scheduleCheck(null)
+	logTrace "endTimeCheck"
+	scheduleCheck()
 }
 
 String getDtNow(){
@@ -376,7 +423,7 @@ String getDtNow(){
 String formatDt(Date dt){
 	SimpleDateFormat tf=new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
 	if(getTimeZone()) tf.setTimeZone(getTimeZone())
-	else log.warn "TimeZone is not found or is not set... Please Try to open your location and Press Save..."
+	else logWarn "TimeZone is not found or is not set... Please Try to open your location and Press Save..."
 	return (String)tf.format(dt)
 }
 
@@ -389,172 +436,231 @@ static Long GetTimeDiffSeconds(String lastDate){
 	return diff
 }
 
-def getTimeZone(){
-	def tz=null
-	if(location?.timeZone) tz=location.timeZone
-	if(!tz){ log.warn "getTimeZone: TimeZone is not found or is not set... Please Try to open your location and Press Save..." }
+TimeZone getTimeZone(){
+	TimeZone tz=null
+	if(location?.timeZone) tz=(TimeZone)location.timeZone
+	if(!tz){ logWarn "getTimeZone: TimeZone is not found or is not set... Please Try to open your location and Press Save..." }
 	return tz
 }
 
-Integer getLastUpdSec(){ return !(String)atomicState.lastUpdDt ? 100000 : GetTimeDiffSeconds((String)atomicState.lastUpdDt).toInteger() }
+Integer getLastUpdSec(){
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+	String tm= fld.lastUpdDt ?: state.lastUpdDt
+	return !tm ? 100000 : GetTimeDiffSeconds(tm).toInteger()
+}
 
 //Main logic to pick a random set of lights from the large set of lights to turn on and then turn the rest off
 
-void scheduleCheck(evt){
-	Boolean mTimeOk=timeOk
-	Boolean mHomeIsEmpty=homeIsEmpty
-	Boolean mDaysOk=daysOk
+void scheduleCheck(){
+	logTrace "scheduleCheck"
+	Boolean mTimeOk=getTimeOk()
+	Boolean mHomeIsEmpty=getHomeIsEmpty()
+	Boolean mDaysOk=getDaysOk()
 
 	Boolean someoneIsHome=!mHomeIsEmpty
-	Boolean allOk=modeOk && mDaysOk && mTimeOk && mHomeIsEmpty
+	Boolean allOk=getModeOk() && mDaysOk && mTimeOk && mHomeIsEmpty
+	Integer setFreq= (Integer)settings.frequency_minutes
 
-	if(allOk && getLastUpdSec() > ((frequency_minutes - 1) * 60) ){
-		atomicState.lastUpdDt=getDtNow()
-		log.debug("Running")
-		atomicState.Running=true
+	Integer lastUpd=getLastUpdSec()
 
-		// turn off switches
-		def inactive_switches=switches
+	String myId=app.id.toString()
+	Map fld=theCacheVFLD[myId] ?: [:]
+
+	if(allOk && lastUpd > ((setFreq - 1) * 60) ){
+		fld.lastUpdDt=getDtNow()
+		fld.Running=true
+		theCacheVFLD[myId]=fld
+		theCacheVFLD=theCacheVFLD
+		state.lastUpdDt=fld.lastUpdDt
+		state.Running=true
+
+		logDebug("Running")
+
+		List inactive_switches=(List)settings.switches
 		List<Integer> vacactive_switches=[]
-		if((Boolean)atomicState.Running){
-			vacactive_switches=(List)atomicState.vacactive_switches
-			Integer sz= vacactive_switches ? vacactive_switches.size() : 0
-			for (Integer i=0; i < sz ; i++){
- 				inactive_switches[ vacactive_switches[i] ].off()
-				log.trace "turned off ${inactive_switches[ vacactive_switches[i] ]}"
-			}
-			atomicState.vacactive_switches=[]
-			vacactive_switches=[]
+
+		Boolean ba= ((Boolean)fld.Running || (Boolean)state.Running)
+		if(ba){
+			vacactive_switches=(List<Integer>)fld.vacactive_switches
+			vacactive_switches= vacactive_switches!=null ? vacactive_switches : (List<Integer>)state.vacactive_switches
 		}
 
 		Random random=new Random()
-		Integer numlight=number_of_active_lights
-		sz=inactive_switches.size()
+		Integer numlight=(Integer)settings.number_of_active_lights
+		Integer sz=inactive_switches.size()
 		if(numlight > sz) numlight=sz
-		log.trace "inactive switches: ${sz} numlight: ${numlight}"
+		logTrace "available switches: ${sz} number to turn on (numlight): ${numlight}"
+		List<Integer> new_vacactive_switches=[]
+
 		for (Integer i=0 ; i < numlight ; i++){
 			// grab a random switch to turn on
 			Integer random_int=random.nextInt(sz)
-			while (vacactive_switches?.contains(random_int)){
+			while (new_vacactive_switches?.contains(random_int)){
 				random_int=random.nextInt(sz)
 			}
-			vacactive_switches << random_int
+			new_vacactive_switches << random_int
+			// if selected on switch is in turn-off list, remove it from turn off list
+			if(vacactive_switches.contains(random_int)) {
+				vacactive_switches.remove(vacactive_switches.indexOf(random_int))
+			}
 		}
+
+		fld.vacactive_switches=new_vacactive_switches
+		theCacheVFLD[myId]=fld
+		theCacheVFLD=theCacheVFLD
+		state.vacactive_switches=new_vacactive_switches
+
+		//logTrace "vacactive ${new_vacactive_switches} inactive ${inactive_switches}"
+
+		// turn on switches
 		for (Integer i=0 ; i < numlight; i++){
- 			inactive_switches[ vacactive_switches[i] ].on()
-			log.trace "turned on ${inactive_switches[ vacactive_switches[i] ]}"
+			def dev = inactive_switches[ new_vacactive_switches[i] ]
+			changeSwitch(dev,'on')
+//			inactive_switches[ new_vacactive_switches[i] ].on()
+//			logInfo "turned on ${inactive_switches[ new_vacactive_switches[i] ]}"
 		}
-		atomicState.vacactive_switches=vacactive_switches
-		//log.trace "vacactive ${vacactive_switches} inactive ${inactive_switches}"
 
-		if(on_during_active_lights){
- 			on_during_active_lights.on()
-			log.trace "turned on ${on_during_active_lights}"
+		// turn off switches
+		sz= vacactive_switches ? vacactive_switches.size() : 0
+		for (Integer i=0; i < sz ; i++){
+			def dev = inactive_switches[ vacactive_switches[i] ]
+			changeSwitch(dev,'off')
+//			inactive_switches[ vacactive_switches[i] ].off()
+//			logInfo "turned off ${inactive_switches[ vacactive_switches[i] ]}"
 		}
-		Integer delay=frequency_minutes
+
+		if(settings.on_during_active_lights){
+			((List)settings.on_during_active_lights).each{ it ->
+				changeSwitch(it,'on')
+			}
+			//settings.on_during_active_lights*.on()
+			//logInfo "turned on ${settings.on_during_active_lights}"
+		}
+
 		Integer random_int=random.nextInt(14)
-		log.trace "reschedule  ${delay} + ${random_int} minutes"
-		runIn( (delay+random_int)*60, initCheck, [overwrite: true])
-		runIn( (delay+random_int + 10)*60, failsafe, [overwrite: true])
+		logTrace "reschedule ${setFreq} + ${random_int} minutes"
+		fld.schedRunning=true
+		theCacheVFLD[myId]=fld
+		theCacheVFLD=theCacheVFLD
+		state.schedRunning=true
+		runIn( (setFreq+random_int)*60, initCheck, [overwrite: true])
+		runIn( (setFreq+random_int + 10)*60, failsafe, [overwrite: true])
 
-	} else {
-		if(allOk && getLastUpdSec() <= ((frequency_minutes - 1) * 60) ){
-			log.trace "had to reschedule  ${getLastUpdSec()}, ${frequency_minutes*60}"
-			runIn( (frequency_minutes*60-getLastUpdSec()), initCheck, [overwrite: true])
-		} else {
-			Boolean mySchedRunning=(Boolean)atomicState.schedRunning
-			if(people && someoneIsHome){
+	}else{
+
+		if(allOk && lastUpd <= ((setFreq - 1) * 60) ){
+			logTrace "had to reschedule ${lastUpd}, ${setFreq}"
+			runIn( (setFreq*60-lastUpd), initCheck, [overwrite: true])
+			fld.schedRunning=true
+			theCacheVFLD[myId]=fld
+			theCacheVFLD=theCacheVFLD
+			state.schedRunning=true
+
+		}else{
+			Boolean mySchedRunning=((Boolean)fld.schedRunning || (Boolean)state.schedRunning)
+			Boolean myRunning= ((Boolean)fld.Running || (Boolean)state.Running)
+			if(settings.people && someoneIsHome){
 				//don't turn off lights if anyone is home
-				if(mySchedRunning){
-					log.debug("Someone is home - Stopping Schedule Vacation Lights")
+				if(myRunning || mySchedRunning){
+					logDebug("Someone is home - Stopping Schedule Vacation Lights")
 					clearState()
 				}
-			} else {
-				Boolean myRunning=(Boolean)atomicState.Running
-				if(!modeOk || !mDaysOk){
+			}else{
+				if(!getModeOk() || !mDaysOk){
 					if(myRunning || mySchedRunning){
-						log.debug("wrong mode or day Stopping Vacation Lights")
+						logDebug("wrong mode or day Stopping Vacation Lights")
 						clearState(true)
 					}
-				} else if(modeOk && mDaysOk && !mTimeOk){
+				} else if(getModeOk() && mDaysOk && !mTimeOk){
 					if(myRunning || mySchedRunning){
-						log.debug("wrong time - Stopping Vacation Lights")
+						logDebug("wrong time - Stopping Vacation Lights")
 						clearState(true)
 					}
 				}
 			}
 		}
 	}
-	if(!(Boolean)atomicState.startendRunning){
+	Boolean aa= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
+	if(!aa){
 		schedStartEnd()
 	}
 }
 
+void changeSwitch(dev, String val){
+	String curVal=dev.currentValue('switch')
+	if(curVal != val){
+		dev."${val}"()
+		logInfo "turned ${val} ${dev}"
+	}
+}
+
 Boolean getModeOk(){
-	Boolean result=!newMode || newMode.contains(location.mode)
-	//log.trace "modeOk=$result"
+	Boolean result=!settings.newMode || settings.newMode.contains(location.mode)
+	//logTrace "modeOk=$result"
 	result
 }
 
 Boolean getDaysOk(){
 	Boolean result=true
-	if(days){
+	if((List)settings.days){
 		SimpleDateFormat df=new SimpleDateFormat("EEEE")
 		if(getTimeZone()) df.setTimeZone(getTimeZone())
-		else {
+		else{
 			df.setTimeZone(TimeZone.getTimeZone("America/New_York"))
 		}
 		String day=(String)df.format(new Date())
-		result=days.contains(day)
+		result=((List<String>)settings.days).contains(day)
 	}
-	//log.trace "daysOk=$result"
+	//logTrace "daysOk=$result"
 	result
 }
 
 Boolean getHomeIsEmpty(){
 	Boolean result=true
-	if(people?.findAll { it?.currentPresence == "present" }){
+	if(settings.people?.findAll { it?.currentPresence == "present" }){
 		result=false
 	}
-	//log.debug("homeIsEmpty: ${result}")
+	//logDebug("homeIsEmpty: ${result}")
 	return result
 }
 
 Boolean getTimeOk(){
 	Boolean result=true
-	def sunTimes=app.getSunriseAndSunset()
+	Map sunTimes=app.getSunriseAndSunset()
 	if(!sunTimes.sunrise){
-		log.warn "Actual sunrise and sunset times unavailable, please reset hub location"
+		logWarn "Actual sunrise and sunset times unavailable, please reset hub location"
 		return false
 	}
 	Date start=timeWindowStart(sunTimes)
 	Date stop=timeWindowStop(sunTimes, start)
 	if(start && stop && getTimeZone()){
-		result=checkTimeCondition(startTimeType, starting, startTimeOffset, endTimeType, ending, endTimeOffset, sunTimes)
+		result=checkTimeCondition((String)settings.startTimeType, (String)settings.starting, (Integer)settings.startTimeOffset, (String)settings.endTimeType, (String)settings.ending, (Integer)settings.endTimeOffset, sunTimes)
 		//result=timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
 	}
-	log.debug "timeOk=$result start: $start   stop: $stop"
+	logDebug "timeOk=$result start: $start   stop: $stop"
 	result
 }
 
 
-Date timeWindowStart(LinkedHashMap sunTimes, Boolean usehhmm=false){
-	Date result=timeWindowMgmt(startTimeType, startTimeOffset, starting, sunTimes, usehhmm)
-//	log.debug "timeWindowStart=${result}  ${formatDt(result)}"
+Date timeWindowStart(Map sunTimes, Boolean usehhmm=false){
+	Date result=timeWindowMgmt((String)settings.startTimeType, (Integer)settings.startTimeOffset, (String)settings.starting, sunTimes, usehhmm)
+//	logDebug "timeWindowStart=${result}  ${formatDt(result)}"
+	return result
 }
 
-Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, strting, LinkedHashMap sunTimes, Boolean usehhmm, Boolean useST=false, Date st=null){
+Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, strting, Map sunTimes, Boolean usehhmm, Boolean useST=false, Date st=null){
 	Long lresult
 	Date result=null
 	if(strtTimeType == sSUNRISE){
-		lresult=(Long)sunTimes.sunrise.time
+		lresult=(Long)((Date)sunTimes.sunrise).getTime()
 		if(lresult && strtTimeOffset){
 			lresult=lresult + Math.round(strtTimeOffset * 60000L)
 		}
 		result=new Date(lresult)
 	}
 	else if(strtTimeType == sSUNSET){
-		lresult=(Long)sunTimes.sunset.time
+		lresult=(Long)((Date)sunTimes.sunset).getTime()
 		if(lresult && strtTimeOffset){
 			lresult=lresult + Math.round(strtTimeOffset * 60000L)
 		}
@@ -562,17 +668,18 @@ Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, strting, LinkedHas
 	}
 	else if(strting && getTimeZone()){
 		if(usehhmm){ result=timeToday(hhmm(strting), getTimeZone()) }
-		else { result=timeToday(strting, getTimeZone()) }
+		else{ result=timeToday(strting, getTimeZone()) }
 	}
-	if(useST && result && st && (Long)st.time > (Long)result.time){
-		result=new Date(result.time+86400000L)
+	if(useST && result && st && (Long)st.getTime() > (Long)result.getTime()){
+		result=new Date(result.getTime()+86400000L)
 	}
 	result
 }
 
-Date timeWindowStop(LinkedHashMap sunTimes, Date st, Boolean usehhmm=false){
-	Date result=timeWindowMgmt(endTimeType, endTimeOffset, ending, sunTimes, usehhmm, true, st)
-//	log.debug "timeWindowStop=${result} ${formatDt(result)}"
+Date timeWindowStop(Map sunTimes, Date st, Boolean usehhmm=false){
+	Date result=timeWindowMgmt((String)settings.endTimeType, (Integer)settings.endTimeOffset, (String)settings.ending, sunTimes, usehhmm, true, st)
+//	logDebug "timeWindowStop=${result} ${formatDt(result)}"
+	return result
 }
 
 String hhmm(String time, String fmt="HH:mm"){
@@ -584,12 +691,12 @@ String hhmm(String time, String fmt="HH:mm"){
 
 //adjusts the time to local timezone
 Date adjustTime(time=null){
-	Long ltime
+	Long ltime=null
 	if(time instanceof Long){
 		ltime=time
 	} else if(time instanceof String){
 		//get UTC time
-		ltime=timeToday(time, location.timeZone).getTime()
+		ltime=timeToday(time, (TimeZone)location.timeZone).getTime()
 	} else if(time instanceof Date){
 		//get unix time
 		ltime=time.getTime()
@@ -597,18 +704,20 @@ Date adjustTime(time=null){
 		ltime=now()
 	}
 	if(ltime){
-		if(ltime > now()) return new Date(ltime + (Integer)location.timeZone.getOffset(ltime) - (Integer)location.timeZone.getOffset(now()))
+		if(ltime > now()) return new Date(ltime + (Integer)((TimeZone)location.timeZone).getOffset(ltime) - (Integer)((TimeZone)location.timeZone).getOffset((Long)now()))
 		return new Date(ltime)
 	}
 	return null
 }
 
-Boolean checkTimeCondition(String timeFrom, timeFromCustom, Long timeFromOffset, String timeTo, timeToCustom, Long timeToOffset, sunTimes){
+Boolean checkTimeCondition(String timeFrom, timeFromCustom, Long tfo, String timeTo, timeToCustom, Long tto, sunTimes){
+	Long timeFromOffset=tfo
+	Long timeToOffset=tto
 	Date time=new Date()
 	//convert to minutes since midnight
 	Integer tc=(Integer)time.hours * 60 + (Integer)time.minutes
-	Integer tf
-	Integer tt
+	Integer tf=0
+	Integer tt=0
 	Integer i=0
 
 	while (i < 2){
@@ -621,7 +730,7 @@ Boolean checkTimeCondition(String timeFrom, timeFromCustom, Long timeFromOffset,
 				t=adjustTime(i == 0 ? timeFromCustom : timeToCustom)
 				if(i == 0){
 					timeFromOffset=0L
-				} else {
+				}else{
 					timeToOffset=0L
 				}
 				break
@@ -659,7 +768,7 @@ Boolean checkTimeCondition(String timeFrom, timeFromCustom, Long timeFromOffset,
 	while (tt > 1440) tt -= 1440
 	if(tf < tt){
 		return (tc >= tf) && (tc < tt)
-	} else {
+	}else{
 		return (tc < tt) || (tc >= tf)
 	}
 }
@@ -680,10 +789,9 @@ private static cast(value, String dataType){
 					return 1L
 			}
 			Long result
-			try {
+			try{
 				result=(Long) value
-			} catch(all){
-			}
+			}catch(ignored){}
 			return result ? result : 0L
 		case sNUMBR:
 			if(value == null) return (Integer) 0
@@ -696,9 +804,9 @@ private static cast(value, String dataType){
 					return (Integer) 1
 			}
 			def result
-			try {
-				result=(Integer) value
-			} catch(all){
+			try{
+				result=(Integer)value
+			}catch(ignored){
 				result=(Integer) 0
 			}
 			return result ? result : (Integer) 0
@@ -719,10 +827,9 @@ private static cast(value, String dataType){
 					return (Float) 1
 			}
 			def result
-			try {
-				result=(Float) value
-			} catch(all){
-			}
+			try{
+				result=(Float)value
+			} catch(ignored){}
 			return result ? result : (Float) 0
 		case 'boolean':
 			if(value instanceof String){
@@ -746,11 +853,10 @@ Date getSunset(sunTimes){
 
 String timeIntervalLabel(){
 	String start=sBLK
-	start += myStrFix(startTimeType, starting, startTimeOffset)
-
+	start += myStrFix((String)settings.startTimeType, (String)settings.starting, (Integer)settings.startTimeOffset)
 
 	String finish=sBLK
-	finish += myStrFix(endTimeType, ending, endTimeOffset)
+	finish += myStrFix((String)settings.endTimeType, (String)settings.ending, (Integer)settings.endTimeOffset)
 
 	start && finish ? start+' to '+finish : sBLK
 }
@@ -774,6 +880,24 @@ String myStrFix(String strtTimeType, String strting, Long strtTimeOffset){
 	return start
 }
 
+//sets complete/not complete for the setup section on the main dynamic page
+String greyedOut(){
+	String result=sBLK
+	if(settings.switches){
+		result="complete"		
+	}
+	result
+}
+
+//sets complete/not complete for the settings section on the main dynamic page
+String greyedOutSettings(){
+	String result=sBLK
+	if(settings.people || settings.days || settings.falseAlarmThreshold ){
+		result="complete"		
+	}
+	result
+}
+
 static String myObj(obj){
 	if(obj instanceof String){return 'String'}
 	else if(obj instanceof Map){return 'Map'}
@@ -789,20 +913,29 @@ static String myObj(obj){
 	else{ return 'unknown'}
 }
 
-//sets complete/not complete for the setup section on the main dynamic page
-String greyedOut(){
-	String result=sBLK
-	if(switches){
-		result="complete"		
-	}
-	result
+@Field static final String sBLANK        =''
+@Field static final String sSPACE        =' '
+@Field static final String sLINEBR       ='<br>'
+@Field static final String sCLRRED       ='red'
+@Field static final String sCLRGRY       ='gray'
+@Field static final String sCLRORG       ='orange'
+
+private void logDebug(String msg){ if((Boolean)settings.debugLogging) log.debug logPrefix(msg, "purple") }
+private void logInfo(String msg){ if((Boolean)settings.debugLogging) log.info sSPACE + logPrefix(msg, "#0299b1") }
+private void logTrace(String msg){ if((Boolean)settings.debugLogging) log.trace logPrefix(msg, sCLRGRY) }
+private void logWarn(String msg){ log.warn sSPACE + logPrefix(msg, sCLRORG) }
+
+void logError(String msg, ex=null){
+	log.error logPrefix(msg, sCLRRED)
+	String a
+	try{
+		if (ex) a=getExceptionMessageWithLine(ex)
+	}catch (ignored){}
+	if(a) log.error logPrefix(a, sCLRRED)
 }
 
-//sets complete/not complete for the settings section on the main dynamic page
-String greyedOutSettings(){
-	String result=sBLK
-	if(people || days || falseAlarmThreshold ){
-		result="complete"		
-	}
-	result
+static String logPrefix(String msg, String color=sNULL){
+	return span(sMyName+" (v" + appVersionFLD + ") | ", sCLRGRY) + span(msg, color)
 }
+
+static String span(String str, String clr=sNULL, String sz=sNULL, Boolean bld=false, Boolean br=false){ return str ? "<span ${(clr || sz || bld) ? "style='${clr ? "color: ${clr};" : sBLANK}${sz ? "font-size: ${sz};" : sBLANK}${bld ? "font-weight: bold;" : sBLANK}'" : sBLANK}>${str}</span>${br ? sLINEBR : sBLANK}" : sBLANK }
