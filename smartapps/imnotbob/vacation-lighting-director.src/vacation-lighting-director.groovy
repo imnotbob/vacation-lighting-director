@@ -26,9 +26,9 @@
 import java.text.SimpleDateFormat
 import groovy.transform.Field
 
-@Field static final String sMyName = 'Vaction Lighting Director'
+@Field static final String sMyName = 'Vacation Lighting Director'
 @Field static final String appVersionFLD ='1.1.0.0'
-//@Field static final String appModifiedFLD='2021-10-29'
+//@Field static final String appModifiedFLD='2021-10-31'
 
 // Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
 definition(
@@ -200,12 +200,26 @@ def Settings(){
 		section("More options"){
 			input days
 		}
-		section("More options"){
+		section("Debug & Command options"){
 			input(
 					'debugLogging',
 					'bool',
 					title: 'Enable debug logging',
 					defaultValue: false,
+					submitOnChange: true
+			)
+			input(
+					'dco',
+					'bool',
+					title: 'Disable Command Optimizations',
+					defaultValue: false,
+					submitOnChange: true
+			)
+			input(
+					'cmdDelay',
+					'bool',
+					title: 'Enable delays between switch commands to reduce zwave/zigbee timing',
+					defaultValue: true,
 					submitOnChange: true
 			)
 		}
@@ -256,12 +270,12 @@ void updated(){
 	unsubscribe()
 	clearState(true)
 	initialize()
-	if (settings.debugLogging) runIn(7200, logsOff)
+	if((Boolean)settings.debugLogging) runIn(7200, logsOff)
 }
 
 void logsOff(){
 	logWarn "${app.label} debug logging disabled..."
-	app.updateSetting("debugLogging",[value:sFALSE,type:"bool"])
+	app.updateSetting('debugLogging',[value:sFALSE,type:'bool'])
 }
 
 void initialize(){
@@ -284,13 +298,15 @@ void clearState(Boolean turnOff=false){
 	Boolean running=((Boolean)fld.Running || (Boolean)state.Running)
 
 	if(turnOff && running){
+		Boolean first=true
+		String cmd='off'
 		((List)settings.switches).each { it ->
-			changeSwitch(it,'off')
+			first=changeSwitch(it,cmd, first)
 		}
 		//settings.switches*.off()
 		if(settings.on_during_active_lights){
 			((List)settings.on_during_active_lights).each{ it ->
-				changeSwitch(it,'off')
+				first=changeSwitch(it,cmd, first)
 			}
 		//	settings.on_during_active_lights*.off()
 		}
@@ -514,28 +530,31 @@ void scheduleCheck(){
 		//logTrace "vacactive ${new_vacactive_switches} inactive ${inactive_switches}"
 
 		// turn on switches
+		Boolean first=true
+		String cmd='on'
 		for (Integer i=0 ; i < numlight; i++){
 			def dev = inactive_switches[ new_vacactive_switches[i] ]
-			changeSwitch(dev,'on')
+			first=changeSwitch(dev,cmd, first)
 //			inactive_switches[ new_vacactive_switches[i] ].on()
 //			logInfo "turned on ${inactive_switches[ new_vacactive_switches[i] ]}"
 		}
 
+		if(settings.on_during_active_lights){
+			((List)settings.on_during_active_lights).each{ it ->
+				first=changeSwitch(it,cmd,first)
+			}
+			//settings.on_during_active_lights*.on()
+			//logInfo "turned on ${settings.on_during_active_lights}"
+		}
+
+		cmd='off'
 		// turn off switches
 		sz= vacactive_switches ? vacactive_switches.size() : 0
 		for (Integer i=0; i < sz ; i++){
 			def dev = inactive_switches[ vacactive_switches[i] ]
-			changeSwitch(dev,'off')
+			first=changeSwitch(dev,cmd,first)
 //			inactive_switches[ vacactive_switches[i] ].off()
 //			logInfo "turned off ${inactive_switches[ vacactive_switches[i] ]}"
-		}
-
-		if(settings.on_during_active_lights){
-			((List)settings.on_during_active_lights).each{ it ->
-				changeSwitch(it,'on')
-			}
-			//settings.on_during_active_lights*.on()
-			//logInfo "turned on ${settings.on_during_active_lights}"
 		}
 
 		Integer random_int=random.nextInt(14)
@@ -572,7 +591,7 @@ void scheduleCheck(){
 						logDebug("wrong mode or day Stopping Vacation Lights")
 						clearState(true)
 					}
-				} else if(getModeOk() && mDaysOk && !mTimeOk){
+				}else if(getModeOk() && mDaysOk && !mTimeOk){
 					if(myRunning || mySchedRunning){
 						logDebug("wrong time - Stopping Vacation Lights")
 						clearState(true)
@@ -581,22 +600,27 @@ void scheduleCheck(){
 			}
 		}
 	}
-	Boolean aa= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
+	Boolean aa=((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
 	if(!aa){
 		schedStartEnd()
 	}
 }
 
-void changeSwitch(dev, String val){
-	String curVal=dev.currentValue('switch')
+private Boolean changeSwitch(dev, String val, Boolean first){
+	Boolean res=first
+	String curVal=sNULL
+	if(!(Boolean)settings.dco) curVal=dev.currentValue('switch')
 	if(curVal != val){
+		if((Boolean)settings.cmdDelay && !first) pauseExecution(130L)
 		dev."${val}"()
+		res=false
 		logInfo "turned ${val} ${dev}"
 	}
+	return res
 }
 
 Boolean getModeOk(){
-	Boolean result=!settings.newMode || settings.newMode.contains(location.mode)
+	Boolean result=!settings.newMode || ((List)settings.newMode).contains(location.mode)
 	//logTrace "modeOk=$result"
 	result
 }
@@ -694,13 +718,13 @@ Date adjustTime(time=null){
 	Long ltime=null
 	if(time instanceof Long){
 		ltime=time
-	} else if(time instanceof String){
+	}else if(time instanceof String){
 		//get UTC time
 		ltime=timeToday(time, (TimeZone)location.timeZone).getTime()
-	} else if(time instanceof Date){
+	}else if(time instanceof Date){
 		//get unix time
 		ltime=time.getTime()
-	} else if(!ltime){
+	}else if(!ltime){
 		ltime=now()
 	}
 	if(ltime){
@@ -929,7 +953,7 @@ void logError(String msg, ex=null){
 	log.error logPrefix(msg, sCLRRED)
 	String a
 	try{
-		if (ex) a=getExceptionMessageWithLine(ex)
+		if(ex) a=getExceptionMessageWithLine(ex)
 	}catch (ignored){}
 	if(a) log.error logPrefix(a, sCLRRED)
 }
