@@ -27,7 +27,7 @@ import java.text.SimpleDateFormat
 import groovy.transform.Field
 
 @Field static final String sMyName = 'Vacation Lighting Director'
-@Field static final String appVersionFLD ='1.1.0.0'
+@Field static final String appVersionFLD ='1.1.0.1'
 //@Field static final String appModifiedFLD='2021-10-31'
 
 // Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
@@ -610,11 +610,12 @@ private Boolean changeSwitch(dev, String val, Boolean first){
 	Boolean res=first
 	String curVal=sNULL
 	if(!(Boolean)settings.dco) curVal=dev.currentValue('switch')
-	if(curVal != val){
-		if((Boolean)settings.cmdDelay && !first) pauseExecution(130L)
+	if(!curVal || curVal != val){
+		String a=sBLK
+		if((Boolean)settings.cmdDelay && !first) { a=' with delay'; pauseExecution(130L) }
 		dev."${val}"()
 		res=false
-		logInfo "turned ${val} ${dev}"
+		logInfo "turned ${val} ${dev}"+a
 	}
 	return res
 }
