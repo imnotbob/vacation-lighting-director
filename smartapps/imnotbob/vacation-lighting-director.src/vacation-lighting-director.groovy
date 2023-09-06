@@ -1,5 +1,5 @@
 /**
- *	Vacation Lighting Director  (based off of tslagle's original)
+ *	Vacation Lighting Director (based off of tslagle's original)
  *	Optimized for Hubitat
  *	Supports Longer interval times (up to 180 mins)
  *	Only turns off lights it turned on (vs calling to turn all off) during normal cycling
@@ -22,13 +22,14 @@
 //file:noinspection GrDeprecatedAPIUsage
 //file:noinspection GroovySillyAssignment
 //file:noinspection unused
+//file:noinspection SpellCheckingInspection
 
 import java.text.SimpleDateFormat
 import groovy.transform.Field
 
 @Field static final String sMyName = 'Vacation Lighting Director'
-@Field static final String appVersionFLD ='1.1.0.1'
-//@Field static final String appModifiedFLD='2021-10-31'
+@Field static final String appVersionFLD ='1.1.0.3'
+//@Field static final String appModifiedFLD='2023-03-05'
 
 // Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
 definition(
@@ -110,9 +111,17 @@ def Setup(){
 	]
 
 	Map on_during_active_lights=[
-		name:				"on_during_active_lights",
-		type:				"capability.switch",
-		title:				"On during active times",
+			name:				"on_during_active_lights",
+			type:				"capability.switch",
+			title:				"On during active times",
+			multiple:			true,
+			required:			false
+	]
+
+	Map open_during_active_lights=[
+		name:				"open_during_active_lights",
+		type:				"capability.windowShade",
+		title:				"Open during active times",
 		multiple:			true,
 		required:			false
 	]
@@ -146,6 +155,9 @@ def Setup(){
 		}
 		section("Lights to be on during active times?"){
 			input on_during_active_lights
+		}
+		section("Shades to be open during active times?"){
+			input open_during_active_lights
 		}
 	}
 }
@@ -298,17 +310,21 @@ void clearState(Boolean turnOff=false){
 	Boolean running=((Boolean)fld.Running || (Boolean)state.Running)
 
 	if(turnOff && running){
-		Boolean first=true
-		String cmd='off'
+		Boolean first; first=true
+		String cmd; cmd='off'
 		((List)settings.switches).each { it ->
 			first=changeSwitch(it,cmd, first)
 		}
-		//settings.switches*.off()
 		if(settings.on_during_active_lights){
 			((List)settings.on_during_active_lights).each{ it ->
 				first=changeSwitch(it,cmd, first)
 			}
-		//	settings.on_during_active_lights*.off()
+		}
+		cmd='close'
+		if(settings.open_during_active_lights){
+			((List)settings.open_during_active_lights).each{ it ->
+				first=changeShade(it,cmd, first)
+			}
 		}
 		logInfo "All OFF"
 	}
@@ -334,18 +350,23 @@ void schedStartEnd(){
 	String myId=app.id.toString()
 	Map fld=theCacheVFLD[myId] ?: [:]
 
-	Boolean running= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
-	Date start=null
+	Boolean running
+	running= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
+	Date start,nextStart; start=null
 	if(settings.starting != null || (String)settings.startTimeType != sNULL){
 		start=timeWindowStart(sunTimes, true)
-		if(start && !((Long)start.getTime() > now()) ) start=new Date((Long)start.getTime()+(24*60*60*1000L))
-		logDebug "Scheduling start $start"
-		schedule(start, startTimeCheck)
+		logDebug "Start is $start"
+		nextStart=new Date(start.getTime())
+		if(start && start.getTime() < wnow() ) nextStart=new Date(start.getTime()+86400000L)
+		logDebug "Scheduling next start $nextStart"
+		schedule(nextStart, startTimeCheck)
 		running=true
 	}
 	if(settings.ending != null || (String)settings.endTimeType != sNULL){
-		Date end=timeWindowStop(sunTimes, start, true)
-		if(end && !((Long)end.getTime() > now()) ) end=new Date((Long)end.getTime()+(24*60*60*1000L))
+		Date end
+		end=timeWindowStop(sunTimes, start, true)
+		logDebug "End is $end"
+		if(end && end.getTime() < wnow() ) end=new Date(end.getTime()+86400000L)
 		logDebug "Scheduling end $end"
 		schedule(end, endTimeCheck)
 		running=true
@@ -357,7 +378,9 @@ void schedStartEnd(){
 }
 
 void setSched(){
-	Integer delay=(settings.falseAlarmThreshold != null && settings.falseAlarmThreshold != sBLK) ? settings.falseAlarmThreshold * 60 : 120 // 2 * 60
+	Integer delay
+	def idelay; idelay= settings.falseAlarmThreshold
+	delay=(idelay != null && idelay != sBLK) ? idelay * 60 : 120 // 2 * 60
 	delay= delay<0 || delay>300 ? 120 : delay
 	logTrace "setSched - schedule a check in $delay seconds"
 	if(delay>0) {
@@ -431,15 +454,16 @@ void endTimeCheck(){
 	scheduleCheck()
 }
 
-String getDtNow(){
+static String getDtNow(){
 	Date now=new Date()
 	return formatDt(now)
 }
 
-String formatDt(Date dt){
+static String formatDt(Date dt){
 	SimpleDateFormat tf=new SimpleDateFormat("E MMM dd HH:mm:ss z yyyy")
-	if(getTimeZone()) tf.setTimeZone(getTimeZone())
-	else logWarn "TimeZone is not found or is not set... Please Try to open your location and Press Save..."
+	tf.setTimeZone(getTimeZone())
+/*	if(getTimeZone()) tf.setTimeZone(getTimeZone())
+	else logWarn "TimeZone is not found or is not set... Please Try to open your location and Press Save..." */
 	return (String)tf.format(dt)
 }
 
@@ -452,11 +476,12 @@ static Long GetTimeDiffSeconds(String lastDate){
 	return diff
 }
 
-TimeZone getTimeZone(){
-	TimeZone tz=null
+static TimeZone getTimeZone(){
+	return TimeZone.getDefault()
+/*	TimeZone tz=null
 	if(location?.timeZone) tz=(TimeZone)location.timeZone
 	if(!tz){ logWarn "getTimeZone: TimeZone is not found or is not set... Please Try to open your location and Press Save..." }
-	return tz
+	return tz*/
 }
 
 Integer getLastUpdSec(){
@@ -494,7 +519,8 @@ void scheduleCheck(){
 		logDebug("Running")
 
 		List inactive_switches=(List)settings.switches
-		List<Integer> vacactive_switches=[]
+		List<Integer> vacactive_switches
+		vacactive_switches=[]
 
 		Boolean ba= ((Boolean)fld.Running || (Boolean)state.Running)
 		if(ba){
@@ -503,15 +529,19 @@ void scheduleCheck(){
 		}
 
 		Random random=new Random()
-		Integer numlight=(Integer)settings.number_of_active_lights
-		Integer sz=inactive_switches.size()
+		Integer numlight
+		numlight=(Integer)settings.number_of_active_lights
+		Integer sz
+		sz=inactive_switches.size()
 		if(numlight > sz) numlight=sz
 		logTrace "available switches: ${sz} number to turn on (numlight): ${numlight}"
 		List<Integer> new_vacactive_switches=[]
 
-		for (Integer i=0 ; i < numlight ; i++){
+		Integer i
+		for (i=0 ; i < numlight ; i++){
 			// grab a random switch to turn on
-			Integer random_int=random.nextInt(sz)
+			Integer random_int
+			random_int=random.nextInt(sz)
 			while (new_vacactive_switches?.contains(random_int)){
 				random_int=random.nextInt(sz)
 			}
@@ -530,31 +560,32 @@ void scheduleCheck(){
 		//logTrace "vacactive ${new_vacactive_switches} inactive ${inactive_switches}"
 
 		// turn on switches
-		Boolean first=true
-		String cmd='on'
-		for (Integer i=0 ; i < numlight; i++){
+		Boolean first; first=true
+		String cmd; cmd='on'
+		for (i=0 ; i < numlight; i++){
 			def dev = inactive_switches[ new_vacactive_switches[i] ]
 			first=changeSwitch(dev,cmd, first)
-//			inactive_switches[ new_vacactive_switches[i] ].on()
-//			logInfo "turned on ${inactive_switches[ new_vacactive_switches[i] ]}"
 		}
 
 		if(settings.on_during_active_lights){
 			((List)settings.on_during_active_lights).each{ it ->
 				first=changeSwitch(it,cmd,first)
 			}
-			//settings.on_during_active_lights*.on()
-			//logInfo "turned on ${settings.on_during_active_lights}"
+		}
+
+		cmd='open'
+		if(settings.open_during_active_lights){
+			((List)settings.open_during_active_lights).each{ it ->
+				first=changeShade(it,cmd, first)
+			}
 		}
 
 		cmd='off'
 		// turn off switches
 		sz= vacactive_switches ? vacactive_switches.size() : 0
-		for (Integer i=0; i < sz ; i++){
+		for (i=0; i < sz ; i++){
 			def dev = inactive_switches[ vacactive_switches[i] ]
 			first=changeSwitch(dev,cmd,first)
-//			inactive_switches[ vacactive_switches[i] ].off()
-//			logInfo "turned off ${inactive_switches[ vacactive_switches[i] ]}"
 		}
 
 		Integer random_int=random.nextInt(14)
@@ -607,15 +638,29 @@ void scheduleCheck(){
 }
 
 private Boolean changeSwitch(dev, String val, Boolean first){
-	Boolean res=first
-	String curVal=sNULL
+	Boolean res; res=first
+	String curVal; curVal=sNULL
 	if(!(Boolean)settings.dco) curVal=dev.currentValue('switch')
 	if(!curVal || curVal != val){
-		String a=sBLK
-		if((Boolean)settings.cmdDelay && !first) { a=' with delay'; pauseExecution(130L) }
+		String a; a=sBLK
+		if((Boolean)settings.cmdDelay && !first) { a=' with delay'; wpauseExecution(130L) }
 		dev."${val}"()
 		res=false
 		logInfo "turned ${val} ${dev}"+a
+	}
+	return res
+}
+
+private Boolean changeShade(dev, String val, Boolean first){
+	Boolean res; res=first
+	String curVal; curVal=sNULL
+	if(!(Boolean)settings.dco) curVal=dev.currentValue('windowShade')
+	if(!curVal || curVal != val){
+		String a; a=sBLK
+		if((Boolean)settings.cmdDelay && !first) { a=' with delay'; wpauseExecution(130L) }
+		dev."${val}"()
+		res=false
+		logInfo "${val} ${dev}"+a
 	}
 	return res
 }
@@ -627,7 +672,8 @@ Boolean getModeOk(){
 }
 
 Boolean getDaysOk(){
-	Boolean result=true
+	Boolean result
+	result=true
 	if((List)settings.days){
 		SimpleDateFormat df=new SimpleDateFormat("EEEE")
 		if(getTimeZone()) df.setTimeZone(getTimeZone())
@@ -642,7 +688,8 @@ Boolean getDaysOk(){
 }
 
 Boolean getHomeIsEmpty(){
-	Boolean result=true
+	Boolean result
+	result=true
 	if(settings.people?.findAll { it?.currentPresence == "present" }){
 		result=false
 	}
@@ -651,7 +698,8 @@ Boolean getHomeIsEmpty(){
 }
 
 Boolean getTimeOk(){
-	Boolean result=true
+	Boolean result
+	result=true
 	Map sunTimes=app.getSunriseAndSunset()
 	if(!sunTimes.sunrise){
 		logWarn "Actual sunrise and sunset times unavailable, please reset hub location"
@@ -674,28 +722,28 @@ Date timeWindowStart(Map sunTimes, Boolean usehhmm=false){
 	return result
 }
 
-Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, strting, Map sunTimes, Boolean usehhmm, Boolean useST=false, Date st=null){
+Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, String strting, Map sunTimes, Boolean usehhmm, Boolean useST=false, Date st=null){
 	Long lresult
-	Date result=null
+	Date result; result=null
 	if(strtTimeType == sSUNRISE){
-		lresult=(Long)((Date)sunTimes.sunrise).getTime()
+		lresult=((Date)sunTimes.sunrise).getTime()
 		if(lresult && strtTimeOffset){
 			lresult=lresult + Math.round(strtTimeOffset * 60000L)
 		}
 		result=new Date(lresult)
 	}
 	else if(strtTimeType == sSUNSET){
-		lresult=(Long)((Date)sunTimes.sunset).getTime()
+		lresult=((Date)sunTimes.sunset).getTime()
 		if(lresult && strtTimeOffset){
 			lresult=lresult + Math.round(strtTimeOffset * 60000L)
 		}
 		result=new Date(lresult)
 	}
 	else if(strting && getTimeZone()){
-		if(usehhmm){ result=timeToday(hhmm(strting), getTimeZone()) }
-		else{ result=timeToday(strting, getTimeZone()) }
+		if(usehhmm){ result=wtimeToday(hhmm(strting), getTimeZone()) }
+		else{ result=wtimeToday(strting, getTimeZone()) }
 	}
-	if(useST && result && st && (Long)st.getTime() > (Long)result.getTime()){
+	if(useST && result && st && st.getTime() > result.getTime()){
 		result=new Date(result.getTime()+86400000L)
 	}
 	result
@@ -708,7 +756,7 @@ Date timeWindowStop(Map sunTimes, Date st, Boolean usehhmm=false){
 }
 
 String hhmm(String time, String fmt="HH:mm"){
-	Date t=timeToday(time, getTimeZone())
+	Date t=wtimeToday(time, getTimeZone())
 	SimpleDateFormat f=new SimpleDateFormat(fmt)
 	f.setTimeZone(getTimeZone())
 	f.format(t)
@@ -716,39 +764,47 @@ String hhmm(String time, String fmt="HH:mm"){
 
 //adjusts the time to local timezone
 Date adjustTime(time=null){
-	Long ltime=null
+	Long ltime; ltime=null
 	if(time instanceof Long){
 		ltime=time
 	}else if(time instanceof String){
 		//get UTC time
-		ltime=timeToday(time, (TimeZone)location.timeZone).getTime()
+		ltime=wtimeToday(time, getTimeZone()).getTime()
 	}else if(time instanceof Date){
 		//get unix time
 		ltime=time.getTime()
 	}else if(!ltime){
-		ltime=now()
+		ltime=wnow()
 	}
 	if(ltime){
-		if(ltime > now()) return new Date(ltime + (Integer)((TimeZone)location.timeZone).getOffset(ltime) - (Integer)((TimeZone)location.timeZone).getOffset((Long)now()))
+		if(ltime > wnow()) return new Date(ltime + getTimeZone().getOffset(ltime) - getTimeZone().getOffset(wnow()))
 		return new Date(ltime)
 	}
 	return null
 }
 
+private void wpauseExecution(Long t){ pauseExecution(t) }
+private Date wtimeToday(String str,TimeZone tz){ return (Date)timeToday(str,tz) }
+private Long wnow(){ return (Long)now() }
+
+
 Boolean checkTimeCondition(String timeFrom, timeFromCustom, Long tfo, String timeTo, timeToCustom, Long tto, sunTimes){
-	Long timeFromOffset=tfo
-	Long timeToOffset=tto
+	Long timeFromOffset, timeToOffset
+	timeFromOffset=tfo
+	timeToOffset=tto
 	Date time=new Date()
 	//convert to minutes since midnight
 	Integer tc=(Integer)time.hours * 60 + (Integer)time.minutes
-	Integer tf=0
-	Integer tt=0
-	Integer i=0
+	Integer tf, tt, i
+	tf=0
+	tt=0
+	i=0
 
 	while (i < 2){
-		Date t=null
-		Integer h=null
-		Integer m=0
+		Date t; t=null
+		Integer h,m
+		h=null
+		m=0
 		switch(i == 0 ? timeFrom : timeTo){
 			case "custom time":
 			case sTIME:
@@ -877,17 +933,19 @@ Date getSunset(sunTimes){
 }
 
 String timeIntervalLabel(){
-	String start=sBLK
+	String start
+	start=sBLK
 	start += myStrFix((String)settings.startTimeType, (String)settings.starting, (Integer)settings.startTimeOffset)
 
-	String finish=sBLK
+	String finish
+	finish=sBLK
 	finish += myStrFix((String)settings.endTimeType, (String)settings.ending, (Integer)settings.endTimeOffset)
 
 	start && finish ? start+' to '+finish : sBLK
 }
 
 String myStrFix(String strtTimeType, String strting, Long strtTimeOffset){
-	String start=sBLK
+	String start; start=sBLK
 	switch (strtTimeType){
 		case sTIME:
 			if(strting){
@@ -907,7 +965,7 @@ String myStrFix(String strtTimeType, String strting, Long strtTimeOffset){
 
 //sets complete/not complete for the setup section on the main dynamic page
 String greyedOut(){
-	String result=sBLK
+	String result; result=sBLK
 	if(settings.switches){
 		result="complete"		
 	}
@@ -916,7 +974,7 @@ String greyedOut(){
 
 //sets complete/not complete for the settings section on the main dynamic page
 String greyedOutSettings(){
-	String result=sBLK
+	String result; result=sBLK
 	if(settings.people || settings.days || settings.falseAlarmThreshold ){
 		result="complete"		
 	}
