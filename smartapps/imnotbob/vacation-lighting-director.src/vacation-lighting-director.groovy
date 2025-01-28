@@ -28,8 +28,8 @@ import java.text.SimpleDateFormat
 import groovy.transform.Field
 
 @Field static final String sMyName = 'Vacation Lighting Director'
-@Field static final String appVersionFLD ='1.1.0.3'
-//@Field static final String appModifiedFLD='2023-03-05'
+@Field static final String appVersionFLD ='1.1.0.4'
+//@Field static final String appModifiedFLD='2025-01-27'
 
 // Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
 definition(
@@ -87,6 +87,13 @@ def Setup(){
 		multiple:			true,
 		required:			true
 	]
+	Map simSwitch=[
+			name:				"simSwitch",
+			type:				"capability.switch",
+			title:				"Switch that allows simulator to be active",
+			multiple:			false,
+			required:			false
+	]
 	Map switches=[
 		name:				"switches",
 		type:				"capability.switch",
@@ -142,6 +149,7 @@ def Setup(){
 		}
 		section("Simulator Triggers"){
 			input newMode
+			input simSwitch
 			href "timeIntervalPage", title: "Times", description: timeIntervalLabel()    //, refreshAfterSelection:true
 		}
 		section("Light switches to cycle on/off"){
@@ -291,13 +299,16 @@ void logsOff(){
 }
 
 void initialize(){
-	subscribe(location, "systemStart", modeChangeHandler)
+	subscribe(location, "systemStart", triggerChangeHandler)
 	if(settings.newMode != null){
-		subscribe(location, "mode", modeChangeHandler)
+		subscribe(location, "mode", triggerChangeHandler)
+	}
+	if(settings.simSwitch != null){
+		subscribe(settings.simSwitch, "switch", triggerChangeHandler)
 	}
 	schedStartEnd()
 	if(settings.people){
-		subscribe(settings.people, "presence", modeChangeHandler)
+		subscribe(settings.people, "presence", triggerChangeHandler)
 	}
 	logDebug "Initialized with settings: ${settings}"
 	setSched()
@@ -347,31 +358,44 @@ void schedStartEnd(){
 		logWarn "Actual sunrise and sunset times unavailable, please reset hub location"
 		return
 	}
+	unschedule('endTimeCheck')
+	unschedule('startTimeCheck')
+	unschedule('schedStartEnd')
+
 	String myId=app.id.toString()
 	Map fld=theCacheVFLD[myId] ?: [:]
 
-	Boolean running
-	running= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
+	Date needAfterRun; needAfterRun= null
+	Boolean running; running= ((Boolean)fld.startendRunning || (Boolean)state.startendRunning)
 	Date start,nextStart; start=null
 	if(settings.starting != null || (String)settings.startTimeType != sNULL){
 		start=timeWindowStart(sunTimes, true)
 		logDebug "Start is $start"
 		nextStart=new Date(start.getTime())
-		if(start && start.getTime() < wnow() ) nextStart=new Date(start.getTime()+86400000L)
+		if(start && start.getTime() < wnow() ) {
+			nextStart=new Date(start.getTime()+86400000L)
+			needAfterRun= nextStart
+		}
 		logDebug "Scheduling next start $nextStart"
-		schedule(nextStart, startTimeCheck)
+		wschedule(nextStart, 'startTimeCheck')
 		running=true
 	}
 	if(settings.ending != null || (String)settings.endTimeType != sNULL){
 		Date end
 		end=timeWindowStop(sunTimes, start, true)
 		logDebug "End is $end"
-		if(end && end.getTime() < wnow() ) end=new Date(end.getTime()+86400000L)
+		if(end && end.getTime() < wnow() ) {
+			end=new Date(end.getTime()+86400000L)
+			if(!needAfterRun) needAfterRun= end
+		}
 		logDebug "Scheduling end $end"
-		schedule(end, endTimeCheck)
+		wschedule(end, 'endTimeCheck')
 		running=true
 	}
-	fld.startendRunning=running
+	if(needAfterRun){
+		wschedule(wtimeTodayAfter('23:59','03:03',getTimeZone()), 'schedStartEnd')
+	}
+	fld.startendRunning= running
 	theCacheVFLD[myId]=fld
 	theCacheVFLD=theCacheVFLD
 	state.startendRunning=running
@@ -395,14 +419,20 @@ void setSched(){
 	else initCheck()
 }
 
-void modeChangeHandler(evt){
-	logTrace "modeChangeHandler Event Name ${evt.name} event value: ${evt.value}"
+void modeChangeHandler(evt) { triggerChangeHandler(evt)}
+
+/**
+ * receive events from simulator trigger
+ */
+void triggerChangeHandler(evt){
+	logTrace "triggerChangeHandler Event Name ${evt.name} event value: ${evt.value}"
 	setSched()
 }
 
 void clearSched(){
 	unschedule('endTimeCheck')
 	unschedule('startTimeCheck')
+	unschedule('schedStartEnd')
 	String myId=app.id.toString()
 	Map fld=theCacheVFLD[myId] ?: [:]
 	fld.startendRunning=false
@@ -497,10 +527,10 @@ void scheduleCheck(){
 	logTrace "scheduleCheck"
 	Boolean mTimeOk=getTimeOk()
 	Boolean mHomeIsEmpty=getHomeIsEmpty()
-	Boolean mDaysOk=getDaysOk()
+	Boolean mDaysOk=daysOk
 
 	Boolean someoneIsHome=!mHomeIsEmpty
-	Boolean allOk=getModeOk() && mDaysOk && mTimeOk && mHomeIsEmpty
+	Boolean allOk= canRun && mDaysOk && mTimeOk && mHomeIsEmpty
 	Integer setFreq= (Integer)settings.frequency_minutes
 
 	Integer lastUpd=getLastUpdSec()
@@ -617,13 +647,11 @@ void scheduleCheck(){
 					clearState()
 				}
 			}else{
-				if(!getModeOk() || !mDaysOk){
-					if(myRunning || mySchedRunning){
-						logDebug("wrong mode or day Stopping Vacation Lights")
+				if(myRunning || mySchedRunning){
+					if(!canRun || !mDaysOk){
+						logDebug("wrong mode/switch or day Stopping Vacation Lights")
 						clearState(true)
-					}
-				}else if(getModeOk() && mDaysOk && !mTimeOk){
-					if(myRunning || mySchedRunning){
+					}else if(canRun && mDaysOk && !mTimeOk){
 						logDebug("wrong time - Stopping Vacation Lights")
 						clearState(true)
 					}
@@ -665,10 +693,11 @@ private Boolean changeShade(dev, String val, Boolean first){
 	return res
 }
 
-Boolean getModeOk(){
+Boolean getCanRun(){
 	Boolean result=!settings.newMode || ((List)settings.newMode).contains(location.mode)
+	Boolean result1=!settings.simSwitch || (settings.simSwitch.switch == 'on')
 	//logTrace "modeOk=$result"
-	result
+	result && result1
 }
 
 Boolean getDaysOk(){
@@ -708,7 +737,14 @@ Boolean getTimeOk(){
 	Date start=timeWindowStart(sunTimes)
 	Date stop=timeWindowStop(sunTimes, start)
 	if(start && stop && getTimeZone()){
-		result=checkTimeCondition((String)settings.startTimeType, (String)settings.starting, (Integer)settings.startTimeOffset, (String)settings.endTimeType, (String)settings.ending, (Integer)settings.endTimeOffset, sunTimes)
+		result= checkTimeCondition(
+				(String)settings.startTimeType,
+				(String)settings.starting,
+				(Integer)settings.startTimeOffset,
+				(String)settings.endTimeType,
+				(String)settings.ending,
+				(Integer)settings.endTimeOffset,
+				sunTimes)
 		//result=timeOfDayIsBetween( (start), (stop), new Date(), getTimeZone())
 	}
 	logDebug "timeOk=$result start: $start   stop: $stop"
@@ -716,12 +752,34 @@ Boolean getTimeOk(){
 }
 
 
+/**
+ * get the next window start time
+ * @param sunTimes
+ * @param usehhmm
+ * @return
+ */
 Date timeWindowStart(Map sunTimes, Boolean usehhmm=false){
-	Date result=timeWindowMgmt((String)settings.startTimeType, (Integer)settings.startTimeOffset, (String)settings.starting, sunTimes, usehhmm)
+	Date result=timeWindowMgmt(
+			(String)settings.startTimeType,
+			(Integer)settings.startTimeOffset,
+			(String)settings.starting,
+			sunTimes,
+			usehhmm)
 //	logDebug "timeWindowStart=${result}  ${formatDt(result)}"
 	return result
 }
 
+/**
+ * calculate a window time based on settings/parameters
+ * @param strtTimeType
+ * @param strtTimeOffset
+ * @param strting
+ * @param sunTimes
+ * @param usehhmm
+ * @param useST
+ * @param st
+ * @return
+ */
 Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, String strting, Map sunTimes, Boolean usehhmm, Boolean useST=false, Date st=null){
 	Long lresult
 	Date result; result=null
@@ -749,8 +807,21 @@ Date timeWindowMgmt(String strtTimeType, Long strtTimeOffset, String strting, Ma
 	result
 }
 
+/**
+ * get the next window stop time
+ * @param sunTimes
+ * @param usehhmm
+ * @return
+ */
 Date timeWindowStop(Map sunTimes, Date st, Boolean usehhmm=false){
-	Date result=timeWindowMgmt((String)settings.endTimeType, (Integer)settings.endTimeOffset, (String)settings.ending, sunTimes, usehhmm, true, st)
+	Date result=timeWindowMgmt(
+			(String)settings.endTimeType,
+			(Integer)settings.endTimeOffset,
+			(String)settings.ending,
+			sunTimes,
+			usehhmm,
+			true,
+			st)
 //	logDebug "timeWindowStop=${result} ${formatDt(result)}"
 	return result
 }
@@ -762,8 +833,9 @@ String hhmm(String time, String fmt="HH:mm"){
 	f.format(t)
 }
 
-//adjusts the time to local timezone
+/** adjusts the time to local timezone */
 Date adjustTime(time=null){
+	Long n= wnow()
 	Long ltime; ltime=null
 	if(time instanceof Long){
 		ltime=time
@@ -774,10 +846,11 @@ Date adjustTime(time=null){
 		//get unix time
 		ltime=time.getTime()
 	}else if(!ltime){
-		ltime=wnow()
+		ltime=n
 	}
+	//86400000L
 	if(ltime){
-		if(ltime > wnow()) return new Date(ltime + getTimeZone().getOffset(ltime) - getTimeZone().getOffset(wnow()))
+		if(ltime > n) return new Date(ltime + getTimeZone().getOffset(ltime) - getTimeZone().getOffset(n))
 		return new Date(ltime)
 	}
 	return null
@@ -785,6 +858,8 @@ Date adjustTime(time=null){
 
 private void wpauseExecution(Long t){ pauseExecution(t) }
 private Date wtimeToday(String str,TimeZone tz){ return (Date)timeToday(str,tz) }
+private Date wtimeTodayAfter(String astr,String tstr,TimeZone tz=null){ return (Date)timeTodayAfter(astr,tstr,tz) }
+private void wschedule(Date expression, String handlerMethod, Map options = null){ schedule(expression, handlerMethod, options) }
 private Long wnow(){ return (Long)now() }
 
 
@@ -863,15 +938,15 @@ private static cast(value, String dataType){
 			if(value == null) return 0L
 			if(value instanceof String){
 				if(value.isInteger())
-					return (Long) value.toInteger()
+					return (Long) value.toLong()
 				if(value.isFloat())
 					return (Long) Math.round(value.toFloat())
 				if(value in trueStrings)
 					return 1L
 			}
-			Long result
+			Long result; result=null
 			try{
-				result=(Long) value
+				result= (Long)value
 			}catch(ignored){}
 			return result ? result : 0L
 		case sNUMBR:
@@ -884,34 +959,32 @@ private static cast(value, String dataType){
 				if(value in trueStrings)
 					return (Integer) 1
 			}
-			def result
+			Integer result; result=null
 			try{
 				result=(Integer)value
-			}catch(ignored){
-				result=(Integer) 0
-			}
-			return result ? result : (Integer) 0
+			}catch(ignored){}
+			return result ? result : 0
 		case "string":
 		case "text":
 			if(value instanceof Boolean){
 				return value ? sTRUE : sFALSE
 			}
-			return value ? "$value" : sBLK
+			return value ? "$value".toString() : sBLK
 		case "decimal":
-			if(value == null) return (Float)0
+			if(value == null) return 0.0f
 			if(value instanceof String){
 				if(value.isFloat())
 					return (Float) value.toFloat()
 				if(value.isInteger())
-					return (Float) value.toInteger()
+					return value.toInteger().toFloat()
 				if(value in trueStrings)
-					return (Float) 1
+					return 1.0f
 			}
-			def result
+			Float result; result=null
 			try{
-				result=(Float)value
+				result= (Float)value
 			} catch(ignored){}
-			return result ? result : (Float) 0
+			return result ? result : 0.0f
 		case 'boolean':
 			if(value instanceof String){
 				if(!value || (value in falseStrings))
@@ -924,12 +997,12 @@ private static cast(value, String dataType){
 }
 
 //TODO is this expensive?
-Date getSunrise(sunTimes){
-	return adjustTime(sunTimes.sunrise)
+static Date getSunrise(sunTimes){
+	return (Date)sunTimes.sunrise
 }
 
-Date getSunset(sunTimes){
-	return adjustTime(sunTimes.sunset)
+static Date getSunset(sunTimes){
+	return (Date)sunTimes.sunset
 }
 
 String timeIntervalLabel(){
@@ -1010,7 +1083,7 @@ private void logWarn(String msg){ log.warn sSPACE + logPrefix(msg, sCLRORG) }
 
 void logError(String msg, ex=null){
 	log.error logPrefix(msg, sCLRRED)
-	String a
+	String a; a= sNULL
 	try{
 		if(ex) a=getExceptionMessageWithLine(ex)
 	}catch (ignored){}
