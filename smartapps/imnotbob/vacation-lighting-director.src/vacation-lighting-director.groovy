@@ -28,8 +28,8 @@ import java.text.SimpleDateFormat
 import groovy.transform.Field
 
 @Field static final String sMyName = 'Vacation Lighting Director'
-@Field static final String appVersionFLD ='1.1.0.4'
-//@Field static final String appModifiedFLD='2025-01-27'
+@Field static final String appVersionFLD ='1.1.0.5'
+//@Field static final String appModifiedFLD='2025-01-29'
 
 // Below can remove two comments '//' to allow multiple instances to be deployed (for example daytime instance and nighttime instance)
 definition(
@@ -94,6 +94,13 @@ def Setup(){
 			multiple:			false,
 			required:			false
 	]
+	Map simVar=[
+			name:				"simVar",
+			type:				'text',
+			title:				"Global boolean variable that allows simulator to be active",
+			multiple:			false,
+			required:			false
+	]
 	Map switches=[
 		name:				"switches",
 		type:				"capability.switch",
@@ -150,6 +157,7 @@ def Setup(){
 		section("Simulator Triggers"){
 			input newMode
 			input simSwitch
+			input simVar
 			href "timeIntervalPage", title: "Times", description: timeIntervalLabel()    //, refreshAfterSelection:true
 		}
 		section("Light switches to cycle on/off"){
@@ -288,6 +296,7 @@ void installed(){
 void updated(){
 	logTrace "updated"
 	unsubscribe()
+	removeAllInUseGlobalVar()
 	clearState(true)
 	initialize()
 	if((Boolean)settings.debugLogging) runIn(7200, logsOff)
@@ -305,6 +314,16 @@ void initialize(){
 	}
 	if(settings.simSwitch != null){
 		subscribe(settings.simSwitch, "switch", triggerChangeHandler)
+	}
+	String vn = (String)settings.simVar
+	if(vn){
+		if(vn){
+			def a= getGlobalVar(vn)
+			if(a){
+				subscribe(location, 'variable:'+vn, triggerChangeHandler)
+				addInUseGlobalVar(vn)
+			} else logWarn("Global Variable $vn NOT FOUND")
+		}
 	}
 	schedStartEnd()
 	if(settings.people){
@@ -696,8 +715,15 @@ private Boolean changeShade(dev, String val, Boolean first){
 Boolean getCanRun(){
 	Boolean result=!settings.newMode || ((List)settings.newMode).contains(location.mode)
 	Boolean result1=!settings.simSwitch || (settings.simSwitch.switch == 'on')
+	String vn = (String)settings.simVar
+	Boolean result2; result2 = true
+	if(vn){
+		def a= getGlobalVar(vn)
+		if(a) result2 = (Boolean)a.value
+		else logWarn("Global Variable $vn NOT FOUND")
+	}
 	//logTrace "modeOk=$result"
-	result && result1
+	result && result1 && result2
 }
 
 Boolean getDaysOk(){
@@ -1095,3 +1121,4 @@ static String logPrefix(String msg, String color=sNULL){
 }
 
 static String span(String str, String clr=sNULL, String sz=sNULL, Boolean bld=false, Boolean br=false){ return str ? "<span ${(clr || sz || bld) ? "style='${clr ? "color: ${clr};" : sBLANK}${sz ? "font-size: ${sz};" : sBLANK}${bld ? "font-weight: bold;" : sBLANK}'" : sBLANK}>${str}</span>${br ? sLINEBR : sBLANK}" : sBLANK }
+
